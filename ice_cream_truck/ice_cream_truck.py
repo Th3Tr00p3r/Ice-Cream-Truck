@@ -1,55 +1,49 @@
 """
-Arcade Platformer
-
-Demonstrating the capabilities of arcade in a platformer game
-Supporting the Arcade Platformer article on https://realpython.com
-
-All game artwork from www.kenney.nl
-Game sounds and tile maps by author
+Ice Cream Truck Game
 """
 
-import pathlib
-from typing import Dict
+import math
+from pathlib import Path
+from typing import Dict, Tuple
 
 import arcade
 import constants as game
 
 # Assets path
-ASSETS_PATH = pathlib.Path(__file__).resolve().parent.parent / "assets"
+ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
 
 
-class Enemy(arcade.AnimatedWalkingSprite):
-    """An enemy sprite with basic walking movement"""
+class Popsicle(arcade.Sprite):
+    """
+    An collectible popsicle sprite. Gets thrown away by the 'Ice-Cream Man' and possibly collected by the 'Cat'.
+    """
 
-    def __init__(self, pos_x: int, pos_y: int) -> None:
-        super().__init__(center_x=pos_x, center_y=pos_y)
+    POPSICLE_COLORS = {"red", "blue", "green", "yellow", "brown", "white", "purple", "pink"}
+    color_filename_dict = {color: f"popsicle{color.capitalize()}" for color in POPSICLE_COLORS}
+    THROW_SPEED = game.PLAYER_MOVE_SPEED
 
-        # Where are the player images stored?
-        texture_path = ASSETS_PATH / "images" / "enemies"
+    def __init__(self, init_position: Tuple[int, int], init_angle_degrees: int, color: str) -> None:
+        filepath = ASSETS_PATH / "images" / "items" / self.color_filename_dict[color]
+        init_x, init_y = init_position
+        super().__init__(filename=filepath, center_x=init_x, center_y=init_y)
 
-        # Setup the appropriate textures
-        walking_texture_path = [
-            texture_path / "slimePurple.png",
-            texture_path / "slimePurple_move.png",
-        ]
-        standing_texture_path = texture_path / "slimePurple.png"
-
-        # Load them all now
-        self.walk_left_textures = [arcade.load_texture(texture) for texture in walking_texture_path]
-
-        self.walk_right_textures = [
-            arcade.load_texture(texture, mirrored=True) for texture in walking_texture_path
-        ]
-
-        self.stand_left_textures = [arcade.load_texture(standing_texture_path, mirrored=True)]
-        self.stand_right_textures = [arcade.load_texture(standing_texture_path)]
+        self.color = color
 
         # Set the enemy defaults
-        self.state = arcade.FACE_LEFT
-        self.change_x = -game.PLAYER_MOVE_SPEED // 2
+        self.change_x = -self.THROW_SPEED * math.cos(init_angle_degrees)
+        self.change_y = self.THROW_SPEED * math.sin(init_angle_degrees)
 
-        # Set the initial texture
-        self.texture = self.stand_right_textures[0]
+
+class IceCreamMan(arcade.Sprite):
+    """Doc."""
+
+    pass
+
+
+class Player(arcade.Sprite):
+    """Doc."""
+
+    pass
 
 
 # Title view
@@ -398,7 +392,7 @@ class PlatformerView(arcade.View):
         """Sets up the game for the current level"""
 
         # Get the current map based on the level
-        map_name = f"platform_level_{self.level:02}.tmx"
+        map_name = f"platform_level_{self.level:02}.json"
         map_path = ASSETS_PATH / map_name
 
         # What are the names of the layers?
@@ -409,32 +403,18 @@ class PlatformerView(arcade.View):
         ladders_layer = "ladders"
 
         # Load the current map
-        map = arcade.tilemap.read_tmx(str(map_path))
+        map = arcade.tilemap.TileMap(map_path)
 
         # Load the layers
-        self.background = arcade.tilemap.process_layer(
-            map, layer_name=background_layer, scaling=game.MAP_SCALING
-        )
-        self.goals = arcade.tilemap.process_layer(
-            map, layer_name=goal_layer, scaling=game.MAP_SCALING
-        )
-        self.walls = arcade.tilemap.process_layer(
-            map, layer_name=wall_layer, scaling=game.MAP_SCALING
-        )
-        self.ladders = arcade.tilemap.process_layer(
-            map, layer_name=ladders_layer, scaling=game.MAP_SCALING
-        )
-        self.coins = arcade.tilemap.process_layer(
-            map, layer_name=coin_layer, scaling=game.MAP_SCALING
-        )
+        self.background = map.sprite_lists[background_layer]
+        self.goals = map.sprite_lists[goal_layer]
+        self.walls = map.sprite_lists[wall_layer]
+        self.ladders = map.sprite_lists[ladders_layer]
+        self.coins = map.sprite_lists[coin_layer]
 
         # Process moving platforms
         moving_platforms_layer_name = "moving_platforms"
-        moving_platforms = arcade.tilemap.process_layer(
-            map,
-            layer_name=moving_platforms_layer_name,
-            scaling=game.MAP_SCALING,
-        )
+        moving_platforms = map.sprite_lists[moving_platforms_layer_name]
         for sprite in moving_platforms:
             # Set the initial position of each moving platform
             if "boundary_left" in sprite.properties:
@@ -446,11 +426,7 @@ class PlatformerView(arcade.View):
 
         # Process synchronized platforms
         synchronized_platforms_layer_name = "synch_platforms"
-        synchronized_platforms_list = arcade.tilemap.process_layer(
-            map,
-            layer_name=synchronized_platforms_layer_name,
-            scaling=game.MAP_SCALING,
-        )
+        synchronized_platforms_list = map.sprite_lists[synchronized_platforms_layer_name]
 
         # Create a dict of grouped sprites
         self.synchronized_groups: Dict[str, list] = {}
@@ -479,7 +455,7 @@ class PlatformerView(arcade.View):
         arcade.set_background_color(background_color)
 
         # Find the edge of the map to control viewport scrolling
-        self.map_width = (map.map_size.width - 1) * map.tile_size.width
+        self.map_width = (map.width - 1) * map.tile_width
 
         # Create the player sprite, if they're not already setup
         if not self.player:
@@ -491,8 +467,8 @@ class PlatformerView(arcade.View):
         self.player.change_x = 0
         self.player.change_y = 0
 
-        # Setup our enemies
-        self.enemies = self.create_enemy_sprites()
+        # Setup the popsicle sprite list
+        self.popsicle: arcade.SpriteList = []
 
         # Reset the viewport
         self.view_left = 0
@@ -503,21 +479,7 @@ class PlatformerView(arcade.View):
             player_sprite=self.player,
             platforms=self.walls,
             gravity_constant=game.GRAVITY,
-            ladders=self.ladders,
         )
-
-    def create_enemy_sprites(self) -> arcade.SpriteList:
-        """Creates enemy sprites appropriate for the current level
-
-        Returns:
-            A Sprite List of enemies"""
-        enemies = arcade.SpriteList()
-
-        # Only enemies on level 2
-        if self.level == 2:
-            enemies.append(Enemy(1464, 320))
-
-        return enemies
 
     def create_player_sprite(self) -> arcade.AnimatedWalkingSprite:
         # Where are the player images stored?
