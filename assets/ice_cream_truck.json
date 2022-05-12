@@ -8,7 +8,7 @@
  "margin":0,
  "name":"ice_cream_truck",
  "spacing":0,
- "tilecount":30,
+ "tilecount":29,
  "tiledversion":"1.7.2",
  "tileheight":912,
  "tiles":[
@@ -123,60 +123,56 @@
         {
          "id":27,
          "image":"images\/items\/popsicleBlue.png",
-         "imageheight":512,
-         "imagewidth":512
+         "imageheight":128,
+         "imagewidth":128
         }, 
         {
          "id":28,
          "image":"images\/items\/popsicleBrown.png",
-         "imageheight":512,
-         "imagewidth":512
+         "imageheight":128,
+         "imagewidth":128
         }, 
         {
          "id":29,
          "image":"images\/items\/popsicleGreen.png",
-         "imageheight":512,
-         "imagewidth":512
+         "imageheight":128,
+         "imagewidth":128
         }, 
         {
          "id":30,
          "image":"images\/items\/popsicleOrange.png",
-         "imageheight":512,
-         "imagewidth":512
+         "imageheight":128,
+         "imagewidth":128
         }, 
         {
          "id":31,
          "image":"images\/items\/popsiclePink.png",
-         "imageheight":512,
-         "imagewidth":512
+         "imageheight":128,
+         "imagewidth":128
         }, 
         {
          "id":32,
          "image":"images\/items\/popsiclePurple.png",
-         "imageheight":512,
-         "imagewidth":512
+         "imageheight":128,
+         "imagewidth":128
         }, 
         {
          "id":33,
          "image":"images\/items\/popsicleRed.png",
-         "imageheight":512,
-         "imagewidth":512
+         "imageheight":128,
+         "imagewidth":128
         }, 
         {
          "id":34,
          "image":"images\/items\/popsicleWhite.png",
-         "imageheight":512,
-         "imagewidth":512
+         "imageheight":128,
+         "imagewidth":128
         }, 
         {
          "id":35,
          "image":"images\/items\/popsicleYellow.png",
-         "imageheight":512,
-         "imagewidth":512
-        }, 
-        {
-         "id":36,
-         "image":"images\/items\/truckIceCream1.png"
+         "imageheight":128,
+         "imagewidth":128
         }, 
         {
          "id":37,

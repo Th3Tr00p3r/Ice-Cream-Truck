@@ -4,49 +4,92 @@ Ice Cream Truck Game
 
 import math
 from pathlib import Path
-from typing import Dict, Tuple
+from types import SimpleNamespace
+from typing import Dict
 
 import arcade
-import constants as game
+import game_constants as game
+from helper import Position
 
 # Assets path
 ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
 
 
-class Popsicle(arcade.Sprite):
+class BasicSprite(arcade.Sprite):
+    def __init__(self, init_position: Position, texture_path: Path):
+        init_x, init_y = init_position.as_tuple()
+        super().__init__(filename=texture_path, center_x=init_x, center_y=init_y)
+
+
+class Popsicle(BasicSprite):
     """
     An collectible popsicle sprite. Gets thrown away by the 'Ice-Cream Man' and possibly collected by the 'Cat'.
     """
 
-    POPSICLE_COLORS = {"red", "blue", "green", "yellow", "brown", "white", "purple", "pink"}
-    color_filename_dict = {color: f"popsicle{color.capitalize()}" for color in POPSICLE_COLORS}
-    THROW_SPEED = game.PLAYER_MOVE_SPEED
+    # TODO: Popsicles left on floor melt and yield less points? or fall off screen? or remain on floor?
 
-    def __init__(self, init_position: Tuple[int, int], init_angle_degrees: int, color: str) -> None:
-        filepath = ASSETS_PATH / "images" / "items" / self.color_filename_dict[color]
-        init_x, init_y = init_position
-        super().__init__(filename=filepath, center_x=init_x, center_y=init_y)
+    MAIN_PATH = ASSETS_PATH / "images" / "items"
+    POPSICLE_COLORS = {"red", "blue", "green", "yellow", "brown", "white", "purple", "pink"}
+    pop_color_filename_dict = {
+        color: f"popsicle{color.capitalize()}.png" for color in POPSICLE_COLORS
+    }
+
+    def __init__(
+        self, init_position: Position, throw_speed_ppf: float, throw_angle_degrees: int, color: str
+    ) -> None:
+        filename = self.pop_color_filename_dict[color]
+        super().__init__(init_position, self.MAIN_PATH / filename)
 
         self.color = color
 
         # Set the enemy defaults
-        self.change_x = -self.THROW_SPEED * math.cos(init_angle_degrees)
-        self.change_y = self.THROW_SPEED * math.sin(init_angle_degrees)
+        self.change_x = -throw_speed_ppf * math.cos(throw_angle_degrees)
+        self.change_y = throw_speed_ppf * math.sin(throw_angle_degrees)
+        self.change_angle = math.copysign(1, self.change_x) * throw_speed_ppf
 
 
-class IceCreamMan(arcade.Sprite):
+class IceCreamMan(BasicSprite):
     """Doc."""
 
-    pass
+    texture_path = ASSETS_PATH / "images" / "enemies" / "truckIceCream1.png"
+
+    def __init__(self, init_position: Position):
+        super().__init__(init_position, self.texture_path)
+
+    def throw_popsicle(self):
+        """Throw a random (color, angle) popsicle."""
+
+        pass
 
 
-class Player(arcade.Sprite):
+class Player(BasicSprite):
     """Doc."""
 
-    pass
+    #    D:\MEGA\Programming\games\ice_cream_truck\assets\images\player
+    MAIN_PATH = ASSETS_PATH / "images" / "player"
+
+    def __init__(self, init_position: Position):
+        texture_paths = SimpleNamespace(
+            standing=self.MAIN_PATH / "catStanding1.png",
+            running=[self.MAIN_PATH / f"catRunning{i}.png" for i in (1, 2, 3, 4)],
+            jumping=[self.MAIN_PATH / f"catJumping{i}.png" for i in (1, 2, 3, 4)],
+        )
+        super().__init__(init_position, texture_paths.standing)
 
 
-# Title view
+class GameWindow(arcade.Window):
+    """Doc."""
+
+    def __init__(self):
+        super().__init__(
+            width=game.SCREEN_PROPS.width,
+            height=game.SCREEN_PROPS.height,
+            title=game.SCREEN_TITLE,
+        )
+
+        self.show_view(TitleView())
+
+
 class TitleView(arcade.View):
     """Displays a title screen and prompts the user to begin the game.
     Provides a way to show instructions and start the game.
@@ -92,10 +135,7 @@ class TitleView(arcade.View):
 
         # Draw a rectangle filled with our title image
         arcade.draw_texture_rectangle(
-            center_x=game.SCREEN_WIDTH / 2,
-            center_y=game.SCREEN_HEIGHT / 2,
-            width=game.SCREEN_WIDTH,
-            height=game.SCREEN_HEIGHT,
+            **game.SCREEN_PROPS.as_dict(),
             texture=self.title_image,
         )
 
@@ -125,7 +165,6 @@ class TitleView(arcade.View):
             self.window.show_view(instructions_view)
 
 
-# Instructions view
 class InstructionsView(arcade.View):
     """Show instructions to the player"""
 
@@ -145,10 +184,7 @@ class InstructionsView(arcade.View):
 
         # Draw a rectangle filled with the instructions image
         arcade.draw_texture_rectangle(
-            center_x=game.SCREEN_WIDTH / 2,
-            center_y=game.SCREEN_HEIGHT / 2,
-            width=game.SCREEN_WIDTH,
-            height=game.SCREEN_HEIGHT,
+            **game.SCREEN_PROPS.as_dict(),
             texture=self.instructions_image,
         )
 
@@ -169,7 +205,6 @@ class InstructionsView(arcade.View):
             self.window.show_view(title_view)
 
 
-# Pause view, used when the player pauses the game
 class PauseView(arcade.View):
     """Shown when the game is paused"""
 
@@ -195,8 +230,8 @@ class PauseView(arcade.View):
         # We get the viewport size from the game view
         arcade.draw_lrtb_rectangle_filled(
             left=self.game_view.view_left,
-            right=self.game_view.view_left + game.SCREEN_WIDTH,
-            top=self.game_view.view_bottom + game.SCREEN_HEIGHT,
+            right=self.game_view.view_left + game.SCREEN_PROPS.width,
+            top=self.game_view.view_bottom + game.SCREEN_PROPS.height,
             bottom=self.game_view.view_bottom,
             color=self.fill_color,
         )
@@ -221,7 +256,6 @@ class PauseView(arcade.View):
             self.window.show_view(self.game_view)
 
 
-# Victory View, shown when the player completes a level successfully
 class VictoryView(arcade.View):
     """Shown when a level is completed"""
 
@@ -248,8 +282,8 @@ class VictoryView(arcade.View):
         # We get the viewport size from the game view
         arcade.draw_lrtb_rectangle_filled(
             left=self.game_view.view_left,
-            right=self.game_view.view_left + game.SCREEN_WIDTH,
-            top=self.game_view.view_bottom + game.SCREEN_HEIGHT,
+            right=self.game_view.view_left + game.SCREEN_PROPS.width,
+            top=self.game_view.view_bottom + game.SCREEN_PROPS.height,
             bottom=self.game_view.view_bottom,
             color=self.fill_color,
         )
@@ -276,7 +310,6 @@ class VictoryView(arcade.View):
             self.window.show_view(self.game_view)
 
 
-# Game Over View, shown when the game is over
 class GameOverView(arcade.View):
     """Shown when the player loses the game"""
 
@@ -302,8 +335,8 @@ class GameOverView(arcade.View):
         # We get the viewport size from the game view
         arcade.draw_lrtb_rectangle_filled(
             left=self.game_view.view_left,
-            right=self.game_view.view_left + game.SCREEN_WIDTH,
-            top=self.game_view.view_bottom + game.SCREEN_HEIGHT,
+            right=self.game_view.view_left + game.SCREEN_PROPS.width,
+            top=self.game_view.view_bottom + game.SCREEN_PROPS.height,
             bottom=self.game_view.view_bottom,
             color=self.fill_color,
         )
@@ -345,12 +378,10 @@ class PlatformerView(arcade.View):
         super().__init__()
 
         # These lists will hold different sets of sprites
-        self.coins: arcade.SpriteList = None
+        self.popsicles: arcade.SpriteList = None
         self.background: arcade.SpriteList = None
         self.walls: arcade.SpriteList = None
-        self.ladders: arcade.SpriteList = None
-        self.goals: arcade.SpriteList = None
-        self.enemies: arcade.SpriteList = None
+        self.ice_cream_man: arcade.SpriteList = None
 
         # One sprite for the player, no more is needed
         self.player: arcade.AnimatedWalkingSprite = None
@@ -372,18 +403,6 @@ class PlatformerView(arcade.View):
         # Track the bottom left corner of the current viewport
         self.view_left = 0
         self.view_bottom = 0
-
-        # Check if a joystick is connected
-        joysticks = arcade.get_joysticks()
-
-        if joysticks:
-            # If so, get the first one
-            self.joystick = joysticks[0]
-            self.joystick.open()
-        else:
-            # If not, flag it so we won't use it
-            print("There are no Joysticks")
-            self.joystick = None
 
         # Flag for entering view mode - allows super-user to skim around
         self.view_mode = False
@@ -462,8 +481,8 @@ class PlatformerView(arcade.View):
             self.player = self.create_player_sprite()
 
         # Move the player sprite back to the beginning
-        self.player.center_x = game.PLAYER_START_X
-        self.player.center_y = game.PLAYER_START_Y
+        self.player.center_x = game.PLAYER_START_POS.x
+        self.player.center_y = game.PLAYER_START_POS.y
         self.player.change_x = 0
         self.player.change_y = 0
 
@@ -515,10 +534,9 @@ class PlatformerView(arcade.View):
         player.walk_down_textures = walking_down_textures
 
         # Set the player defaults
-        player.center_x = game.PLAYER_START_X
-        player.center_y = game.PLAYER_START_Y
+        player.center_x = game.PLAYER_START_POS.x
+        player.center_y = game.PLAYER_START_POS.y
         player.state = arcade.FACE_RIGHT
-        player.lives = game.PLAYER_LIVES
 
         # Set the initial texture
         player.texture = player.stand_right_textures[0]
@@ -630,32 +648,11 @@ class PlatformerView(arcade.View):
             # Do the scrolling
             arcade.set_viewport(
                 left=self.view_left,
-                right=game.SCREEN_WIDTH + self.view_left,
+                right=game.SCREEN_PROPS.width + self.view_left,
                 bottom=self.view_bottom,
-                top=game.SCREEN_HEIGHT + self.view_bottom,
+                top=game.SCREEN_PROPS.height + self.view_bottom,
             )
             return
-
-        # First, check for joystick movement
-        if self.joystick:
-            # Check if we're in the dead zone
-            if abs(self.joystick.x) > game.DEAD_ZONE:
-                self.player.change_x = self.joystick.x * game.PLAYER_MOVE_SPEED
-            else:
-                self.player.change_x = 0
-
-            if abs(self.joystick.y) > game.DEAD_ZONE:
-                if self.physics_engine.is_on_ladder():
-                    self.player.change_y = self.joystick.y * game.PLAYER_MOVE_SPEED
-                else:
-                    self.player.change_y = 0
-
-            # Did the user press the jump button?
-            if self.joystick.buttons[0]:
-                if self.physics_engine.can_jump():
-                    self.player.change_y = game.PLAYER_JUMP_SPEED
-                    # Play the jump sound
-                    arcade.play_sound(self.jump_sound)
 
         # Update the player animation
         self.player.update_animation(delta_time)
@@ -739,17 +736,17 @@ class PlatformerView(arcade.View):
 
         # Scroll right
         # Find the current right boundary
-        right_boundary = self.view_left + game.SCREEN_WIDTH - game.RIGHT_VIEWPORT_MARGIN
+        right_boundary = self.view_left + game.SCREEN_PROPS.width - game.RIGHT_VIEWPORT_MARGIN
 
         # Are we right of this boundary? Then we should scroll right
         if self.player.right > right_boundary:
             self.view_left += self.player.right - right_boundary
             # Don't scroll past the right edge of the map
-            if self.view_left > self.map_width - game.SCREEN_WIDTH:
-                self.view_left = self.map_width - game.SCREEN_WIDTH
+            if self.view_left > self.map_width - game.SCREEN_PROPS.width:
+                self.view_left = self.map_width - game.SCREEN_PROPS.width
 
         # Scroll up
-        top_boundary = self.view_bottom + game.SCREEN_HEIGHT - game.TOP_VIEWPORT_MARGIN
+        top_boundary = self.view_bottom + game.SCREEN_PROPS.height - game.TOP_VIEWPORT_MARGIN
         if self.player.top > top_boundary:
             self.view_bottom += self.player.top - top_boundary
 
@@ -766,9 +763,9 @@ class PlatformerView(arcade.View):
         # Do the scrolling
         arcade.set_viewport(
             left=self.view_left,
-            right=game.SCREEN_WIDTH + self.view_left,
+            right=game.SCREEN_PROPS.width + self.view_left,
             bottom=self.view_bottom,
-            top=game.SCREEN_HEIGHT + self.view_bottom,
+            top=game.SCREEN_PROPS.height + self.view_bottom,
         )
 
     def on_draw(self) -> None:
@@ -805,11 +802,5 @@ class PlatformerView(arcade.View):
 
 
 if __name__ == "__main__":
-    window = arcade.Window(
-        width=game.SCREEN_WIDTH,
-        height=game.SCREEN_HEIGHT,
-        title=game.SCREEN_TITLE,
-    )
-    title_view = TitleView()
-    window.show_view(title_view)
+    GameWindow()
     arcade.run()

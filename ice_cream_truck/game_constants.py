@@ -1,10 +1,14 @@
-#
-# Constants for the Arcade Platformer
-#
+"""
+Game Constants
+"""
+
+from helper import Position, ScreenProps
+
+# Physics
+GRAVITY = 1.0
 
 # Window dimensions
-SCREEN_WIDTH = 1000
-SCREEN_HEIGHT = 650
+SCREEN_PROPS = ScreenProps(1000, 650)
 SCREEN_TITLE = "Ice Cream Truck"
 
 # Viewport margins
@@ -21,14 +25,6 @@ CHARACTER_SCALING = 1.0
 # Ice Cream Man / Popsicle Constants
 
 # Player constants
-PLAYER_MOVE_SPEED = 10
-PLAYER_JUMP_SPEED = 20
-GRAVITY = 1.0
-
-PLAYER_START_X = 100
-PLAYER_START_Y = 300
-
-PLAYER_LIVES = 3
-
-# Joystick control
-DEAD_ZONE = 0.1
+PLAYER_MOVE_SPEED = 10  # pixels per frame
+PLAYER_JUMP_SPEED = 20  # pixels per frame
+PLAYER_START_POS = Position(100, 300)  # pixels from bottom, pixels from left
