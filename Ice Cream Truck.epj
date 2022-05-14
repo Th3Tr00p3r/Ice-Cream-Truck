@@ -1,8 +1,8 @@
 {
   "header": {
     "comment": "eric project file for project Ice Cream Truck",
-    "copyright": "Copyright (C) 2021 , ",
-    "saved": "2021-11-07, 20:15:01"
+    "copyright": "Copyright (C) 2022 , ",
+    "saved": "2022-05-12, 11:12:29"
   },
   "project": {
     "AUTHOR": "",
@@ -67,7 +67,8 @@
     "RESOURCES": [],
     "SOURCES": [
       "ice_cream_truck/ice_cream_truck.py",
-      "ice_cream_truck/constants.py"
+      "ice_cream_truck/game_constants.py",
+      "ice_cream_truck/helper.py"
     ],
     "SPELLEXCLUDES": "",
     "SPELLLANGUAGE": "en_US",
