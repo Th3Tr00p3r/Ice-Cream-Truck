@@ -15,8 +15,6 @@ from helper import Vector
 # Assets path
 ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
 
-TexturePair = namedtuple("TexturePair", "RIGHT LEFT")
-
 
 class BasicSprite(arcade.Sprite):
     def __init__(self, init_position: Vector, texture_path: Path, **kwargs):
@@ -27,6 +25,8 @@ class BasicSprite(arcade.Sprite):
         """
         Load a texture pair, with the second being a mirror image.
         """
+
+        TexturePair = namedtuple("TexturePair", "RIGHT LEFT")
         return TexturePair(
             RIGHT=arcade.load_texture(filename),
             LEFT=arcade.load_texture(filename, flipped_horizontally=True),
@@ -89,20 +89,35 @@ class Popsicle(BasicSprite):
         super().__init__(init_position, self.MAIN_PATH / filename, **init_kwargs)
 
 
-class IceCreamMan(BasicSprite):
+class IceCreamTruck(BasicSprite):
     """Doc."""
 
-    texture_path = ASSETS_PATH / "images" / "enemies" / "truckIceCream1.png"
+    MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "enemies"
 
-    def __init__(self, init_position: Vector):
-        super().__init__(init_position, self.texture_path)
-        self.current_position = init_position
+    def __init__(self, init_position: Vector, throw_freq_hz: float, **kwargs):
+        super().__init__(init_position, self.MAIN_TEXTURE_PATH / "truckIceCream1.png", **kwargs)
+
+        # Default to face-right
+        self.face_direction = game.FACE_DIRECTION.RIGHT
+
+        # Used for flipping between image sequences
+        self.cur_texture = 0
+
+        # Load textures
+        self.textures_types = SimpleNamespace(
+            standing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "truckIceCream1.png"),
+        )
+
+        # Set the initial texture
+        self.texture = self.textures_types.standing.RIGHT
+
+        self.throw_freq_hz = throw_freq_hz
 
     def throw_popsicle(self):
         """Throw a random (color, angle) popsicle."""
 
         Popsicle(
-            self.current_position,
+            Vector(self.center_x, self.center_y),
         )
 
 
@@ -111,28 +126,9 @@ class Player(BasicSprite):
 
     MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "player"
 
-    def __init__(self, init_position: Vector, speeds: Vector):
+    def __init__(self, init_position: Vector, speeds: Vector, **kwargs):
 
-        super().__init__(init_position, self.MAIN_TEXTURE_PATH / "catStanding.png")
-
-        #        self.textures = SimpleNamespace(
-        #            stand_right=[arcade.load_texture(self.MAIN_TEXTURE_PATH / "catStanding.png")],
-        #            stand_left=[
-        #                arcade.load_texture(self.MAIN_TEXTURE_PATH / "catStanding.png", mirrored=True)
-        #            ],
-        #            run_right=[
-        #                arcade.load_texture(self.MAIN_TEXTURE_PATH / f"catRunning{i}.png")
-        #                for i in (1, 2, 3, 4)
-        #            ],
-        #            run_left=[
-        #                arcade.load_texture(self.MAIN_TEXTURE_PATH / f"catRunning{i}.png", mirrored=True)
-        #                for i in (1, 2, 3, 4)
-        #            ],
-        #            jump_right=[arcade.load_texture(self.MAIN_TEXTURE_PATH / "catJumping.png")],
-        #            jump_left=[
-        #                arcade.load_texture(self.MAIN_TEXTURE_PATH / "catJumping.png", mirrored=True)
-        #            ],
-        #        )
+        super().__init__(init_position, self.MAIN_TEXTURE_PATH / "catStanding.png", **kwargs)
 
         # Default to face-right
         self.face_direction = game.FACE_DIRECTION.RIGHT
@@ -156,8 +152,12 @@ class Player(BasicSprite):
         self.texture = self.textures_types.standing.RIGHT
 
         self.speeds = speeds
+        self.spin_speed = 15
 
-    def update_animation(self, delta_time: float = 1 / 60):
+    def update_animation(self, delta_time: float, jumps_since_ground: int):
+
+        # stop spinning
+        self.change_angle = 0
 
         # Figure out if we need to flip face left or right
         if self.change_x < 0:
@@ -166,19 +166,24 @@ class Player(BasicSprite):
             self.face_direction = game.FACE_DIRECTION.RIGHT
 
         # Jumping/Stalling/Falling animation
-        if self.change_y != 0:
+        if jumps_since_ground == 1:
             if 5 < self.change_y:
                 self.texture = self.textures_types.jumping[self.face_direction]
-                return
             elif -5 < self.change_y < 5:
                 self.texture = self.textures_types.stalling[self.face_direction]
-                return
             elif self.change_y < -5:
                 self.texture = self.textures_types.falling[self.face_direction]
-                return
+
+        elif jumps_since_ground == 2:
+            self.texture = self.textures_types.stalling[self.face_direction]
+            if self.face_direction == game.FACE_DIRECTION.RIGHT:
+                self.change_angle = -self.spin_speed
+            else:
+                self.change_angle = self.spin_speed
 
         # Running animation
         elif self.change_x != 0:
+            self.angle = 0
             self.cur_texture += 1
             if self.cur_texture == len(self.textures_types.running):
                 self.cur_texture = 0
@@ -186,6 +191,7 @@ class Player(BasicSprite):
 
         # Idle animation
         else:
+            self.angle = 0
             self.texture = self.textures_types.standing[self.face_direction]
 
     def update_velocity(self, keys_pressed, last_pressed_key):
@@ -508,10 +514,10 @@ class PlatformerView(arcade.View):
 
         # These lists will hold different sets of sprites
         self.popsicles: arcade.SpriteList = None
-        self.ice_cream_man: arcade.SpriteList = None
+        self.ice_cream_truck: BasicSprite = None
 
         # One sprite for the player, no more is needed
-        self.player: arcade.AnimatedWalkingSprite = None
+        self.player: BasicSprite = None
 
         # We need a physics engine as well
         self.physics_engine: arcade.PhysicsEnginePlatformer = None
@@ -566,9 +572,16 @@ class PlatformerView(arcade.View):
         # Find the edge of the map to control viewport scrolling
         self.map_width = (map.width - 1) * map.tile_width * game.MAP_SCALING
 
+        # Create the Ice Cream Man and Truck
+        self.throw_freq_hz = 60
+        self.ice_cream_truck = IceCreamTruck(
+            game.TRUCK_START_POS, self.throw_freq_hz, scale=game.ICE_CREAM_TRUCK_SCALING
+        )
+
         # Create the player sprite, if they're not already setup
-        if not self.player:
-            self.player = Player(game.PLAYER_START_POS, game.PLAYER_MOVE_SPEED)
+        self.player = Player(
+            game.PLAYER_START_POS, game.PLAYER_MOVE_SPEED, scale=game.CHARACTER_SCALING
+        )
 
         # Setup the popsicle sprite list
         self.popsicle: arcade.SpriteList = []
@@ -648,9 +661,6 @@ class PlatformerView(arcade.View):
             )
             return
 
-        # Update the player animation
-        self.player.update_animation(delta_time)
-
         # Update the animations for our map objects as well
         self.map_sprite_lists["background"].update_animation(delta_time)
 
@@ -668,6 +678,10 @@ class PlatformerView(arcade.View):
 
         # Update player movement based on the physics engine
         self.physics_engine.update()
+        self.physics_engine.can_jump()
+
+        # Update the player animation
+        self.player.update_animation(delta_time, self.physics_engine.jumps_since_ground)
 
         # Restrict user movement so they can't walk off screen
         if self.player.left < 0:
@@ -756,6 +770,8 @@ class PlatformerView(arcade.View):
         self.map_sprite_lists["background objects"].draw()
         self.map_sprite_lists["ground"].draw()
         #        self.enemies.draw()
+
+        self.ice_cream_truck.draw()
         self.player.draw()
 
         # Draw the score in the lower left
