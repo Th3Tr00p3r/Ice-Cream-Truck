@@ -3,6 +3,7 @@ Ice Cream Truck Game
 """
 
 import math
+from collections import namedtuple
 from contextlib import suppress
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,11 +15,22 @@ from helper import Vector
 # Assets path
 ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
 
+TexturePair = namedtuple("TexturePair", "RIGHT LEFT")
+
 
 class BasicSprite(arcade.Sprite):
     def __init__(self, init_position: Vector, texture_path: Path, **kwargs):
         init_x, init_y = init_position
         super().__init__(filename=texture_path, center_x=init_x, center_y=init_y, **kwargs)
+
+    def load_texture_pair(self, filename):
+        """
+        Load a texture pair, with the second being a mirror image.
+        """
+        return TexturePair(
+            RIGHT=arcade.load_texture(filename),
+            LEFT=arcade.load_texture(filename, flipped_horizontally=True),
+        )
 
     def set_position(self, position: Vector):
         """Doc."""
@@ -100,34 +112,81 @@ class Player(BasicSprite):
     MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "player"
 
     def __init__(self, init_position: Vector, speeds: Vector):
-        self.textures = SimpleNamespace(
-            stand_right=[arcade.load_texture(self.MAIN_TEXTURE_PATH / "catStanding.png")],
-            stand_left=[
-                arcade.load_texture(self.MAIN_TEXTURE_PATH / "catStanding.png", mirrored=True)
-            ],
-            run_right=[
-                arcade.load_texture(self.MAIN_TEXTURE_PATH / f"catRunning{i}.png")
+
+        super().__init__(init_position, self.MAIN_TEXTURE_PATH / "catStanding.png")
+
+        #        self.textures = SimpleNamespace(
+        #            stand_right=[arcade.load_texture(self.MAIN_TEXTURE_PATH / "catStanding.png")],
+        #            stand_left=[
+        #                arcade.load_texture(self.MAIN_TEXTURE_PATH / "catStanding.png", mirrored=True)
+        #            ],
+        #            run_right=[
+        #                arcade.load_texture(self.MAIN_TEXTURE_PATH / f"catRunning{i}.png")
+        #                for i in (1, 2, 3, 4)
+        #            ],
+        #            run_left=[
+        #                arcade.load_texture(self.MAIN_TEXTURE_PATH / f"catRunning{i}.png", mirrored=True)
+        #                for i in (1, 2, 3, 4)
+        #            ],
+        #            jump_right=[arcade.load_texture(self.MAIN_TEXTURE_PATH / "catJumping.png")],
+        #            jump_left=[
+        #                arcade.load_texture(self.MAIN_TEXTURE_PATH / "catJumping.png", mirrored=True)
+        #            ],
+        #        )
+
+        # Default to face-right
+        self.face_direction = game.FACE_DIRECTION.RIGHT
+
+        # Used for flipping between image sequences
+        self.cur_texture = 0
+
+        # Load textures
+        self.textures_types = SimpleNamespace(
+            standing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStanding.png"),
+            running=[
+                self.load_texture_pair(self.MAIN_TEXTURE_PATH / f"catRunning{i}.png")
                 for i in (1, 2, 3, 4)
             ],
-            run_left=[
-                arcade.load_texture(self.MAIN_TEXTURE_PATH / f"catRunning{i}.png", mirrored=True)
-                for i in (1, 2, 3, 4)
-            ],
-            jump_right=[arcade.load_texture(self.MAIN_TEXTURE_PATH / "catJumping.png")],
-            jump_left=[
-                arcade.load_texture(self.MAIN_TEXTURE_PATH / "catJumping.png", mirrored=True)
-            ],
+            jumping=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catJumping.png"),
+            stalling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStalling.png"),
+            falling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catFalling.png"),
         )
+
+        # Set the initial texture
+        self.texture = self.textures_types.standing.RIGHT
 
         self.speeds = speeds
 
-        # Set the player defaults
-        self.state = arcade.FACE_RIGHT
+    def update_animation(self, delta_time: float = 1 / 60):
 
-        #        # Set the initial texture
-        #        self.texture = self.textures.stand_right[0]
+        # Figure out if we need to flip face left or right
+        if self.change_x < 0:
+            self.face_direction = game.FACE_DIRECTION.LEFT
+        elif self.change_x > 0:
+            self.face_direction = game.FACE_DIRECTION.RIGHT
 
-        super().__init__(init_position, self.MAIN_TEXTURE_PATH / "catStanding.png")
+        # Jumping/Stalling/Falling animation
+        if self.change_y != 0:
+            if 5 < self.change_y:
+                self.texture = self.textures_types.jumping[self.face_direction]
+                return
+            elif -5 < self.change_y < 5:
+                self.texture = self.textures_types.stalling[self.face_direction]
+                return
+            elif self.change_y < -5:
+                self.texture = self.textures_types.falling[self.face_direction]
+                return
+
+        # Running animation
+        elif self.change_x != 0:
+            self.cur_texture += 1
+            if self.cur_texture == len(self.textures_types.running):
+                self.cur_texture = 0
+            self.texture = self.textures_types.running[self.cur_texture][self.face_direction]
+
+        # Idle animation
+        else:
+            self.texture = self.textures_types.standing[self.face_direction]
 
     def update_velocity(self, keys_pressed, last_pressed_key):
         """Doc."""

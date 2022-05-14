@@ -2,6 +2,8 @@
 Game Constants
 """
 
+from types import SimpleNamespace
+
 from helper import ScreenProps, Vector
 
 # Physics
@@ -22,7 +24,8 @@ BOTTOM_VIEWPORT_MARGIN = 150
 MAP_SCALING = 0.5
 CHARACTER_SCALING = 1.0
 
-# Ice Cream Man / Popsicle Constants
+# General Sprite Constants
+FACE_DIRECTION = SimpleNamespace(RIGHT=0, LEFT=1)
 
 # Player constants
 PLAYER_MOVE_SPEED = Vector(10, 20)  # pixels per frame
