@@ -33,34 +33,45 @@ class BasicSprite(arcade.Sprite):
             LEFT=arcade.load_texture(filename, flipped_horizontally=True),
         )
 
+    def apply_friction(self, keys_pressed):
+
+        is_stopping = not keys_pressed[arcade.key.RIGHT] and not keys_pressed[arcade.key.LEFT]
+        if is_stopping:
+            self.change_x *= game.FRICTION
+            if abs(self.change_x) < 1:
+                self.change_x = 0
+
 
 class Popsicle(BasicSprite):
     """
     An collectible popsicle sprite. Gets thrown away by the 'Ice-Cream Man' and possibly collected by the 'Cat'.
     """
 
-    # TODO: Popsicles left on floor melt and yield less points? or fall off screen? or remain on floor?
-
     MAIN_PATH = ASSETS_PATH / "images" / "items"
     pop_color_filename_dict = {
         color: f"popsicle{color.capitalize()}.png" for color in game.POPSICLE_COLORS
     }
     BASE_POINTS = 10
+    FROZEN_TIME = 1  # seconds?
+    MELT_RATE = 0.999  # units?
+    alpha: int
 
     def __init__(
         self, init_position: Vector, throw_speed_ppf: float, throw_angle_degrees: int, color: str
     ) -> None:
 
         filename = self.pop_color_filename_dict[color]
+        super().__init__(init_position, self.MAIN_PATH / filename, scale=game.POPSICLE_SCALING)
+
         x_speed = -throw_speed_ppf * math.cos(throw_angle_degrees * math.pi / 180)
         y_speed = throw_speed_ppf * math.sin(throw_angle_degrees * math.pi / 180)
         self.popsicle_color = color
         self.point_value = self.BASE_POINTS
-        super().__init__(init_position, self.MAIN_PATH / filename, scale=game.POPSICLE_SCALING)
 
         self.change_x = x_speed
         self.change_y = y_speed
         self.change_angle = -math.copysign(1, x_speed) * throw_speed_ppf
+        self.melt_timer = 0.0
 
     def move(self):
         """Doc."""
@@ -75,6 +86,16 @@ class Popsicle(BasicSprite):
         # spin
         self.angle += self.change_angle
 
+    def bounce(self):
+        """Doc."""
+
+        if self.change_y < -0.01:
+            self.change_angle *= uniform(-1.5, 1.5)
+            self.change_y *= -0.5
+            self.change_y *= 0.75
+        else:
+            self.stop()
+
     def stop(self, should_stop_y=True):
         """Doc."""
 
@@ -83,6 +104,16 @@ class Popsicle(BasicSprite):
             self.change_y = 0
         self.change_angle = 0
         self.angle = 0
+
+    def melt(self, time_delta: float):
+        """Doc."""
+
+        self.melt_timer += time_delta
+        if self.melt_timer > self.FROZEN_TIME:
+            self.alpha = int(self.MELT_RATE * self.alpha)
+            self.point_value = int(self.alpha / 255 * self.BASE_POINTS)
+            if self.alpha < 20:
+                self.kill()
 
 
 class IceCreamTruck(BasicSprite):
@@ -125,8 +156,11 @@ class Player(BasicSprite):
     """Doc."""
 
     MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "player"
+    RUNNING_ANIMATION_FACTOR = 0.2
 
-    def __init__(self, init_position: Vector, speeds: Vector, **kwargs):
+    def __init__(
+        self, init_position: Vector, speeds: Vector, acceleration_magnitude: float, **kwargs
+    ):
 
         super().__init__(init_position, self.MAIN_TEXTURE_PATH / "catStanding.png", **kwargs)
 
@@ -143,6 +177,7 @@ class Player(BasicSprite):
                 self.load_texture_pair(self.MAIN_TEXTURE_PATH / f"catRunning{i}.png")
                 for i in (1, 2, 3, 4)
             ],
+            sliding=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning1.png"),
             jumping=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catJumping.png"),
             stalling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStalling.png"),
             falling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catFalling.png"),
@@ -152,6 +187,8 @@ class Player(BasicSprite):
         self.texture = self.textures_types.standing.RIGHT
 
         self.speeds = speeds
+        self.acceleration_magnitude = acceleration_magnitude
+        self.acceleration = 0
         self.spin_speed = 30
 
         # for setting running animation frequency
@@ -165,9 +202,9 @@ class Player(BasicSprite):
         self.change_angle = 0
 
         # Figure out if we need to flip face left or right
-        if self.change_x < 0:
+        if self.acceleration < 0:
             self.face_direction = game.FACE_DIRECTION.LEFT
-        elif self.change_x > 0:
+        elif self.acceleration > 0:
             self.face_direction = game.FACE_DIRECTION.RIGHT
 
         # Jumping/Stalling/Falling animation
@@ -189,14 +226,20 @@ class Player(BasicSprite):
                     self.angle = 0
 
         # Running animation
-        elif self.change_x != 0:
+        elif abs(self.change_x) > self.speeds[0] * 0.2:
             self.angle = 0
-            if self.time_accumulator >= 0.2 / len(self.textures_types.running):
+            if self.time_accumulator >= self.RUNNING_ANIMATION_FACTOR / (
+                abs(self.change_x) / self.speeds[0]
+            ) / len(self.textures_types.running):
                 self.cur_texture += 1
                 self.time_accumulator = 0
             if self.cur_texture == len(self.textures_types.running):
                 self.cur_texture = 0
             self.texture = self.textures_types.running[self.cur_texture][self.face_direction]
+
+        # Sliding animation
+        elif 0 < abs(self.change_x) <= self.speeds[0] * 0.2:
+            self.texture = self.textures_types.sliding[self.face_direction]
 
         # Idle animation
         else:
@@ -205,15 +248,31 @@ class Player(BasicSprite):
 
     def update_velocity(self, keys_pressed, last_pressed_key):
         """Doc."""
+        # TODO: adapt for using acceleration instead of instant speed
 
-        run_speed, jump_speed = self.speeds
+        run_speed, _ = self.speeds
 
         is_moving_left = keys_pressed[arcade.key.LEFT] and not keys_pressed[arcade.key.RIGHT]
         is_moving_right = keys_pressed[arcade.key.RIGHT] and not keys_pressed[arcade.key.LEFT]
-        self.change_x = (
-            int(is_moving_left or last_pressed_key == arcade.key.LEFT) * -run_speed
-            + int(is_moving_right or last_pressed_key == arcade.key.RIGHT) * run_speed
-        )
+
+        if is_moving_left or last_pressed_key == arcade.key.LEFT:
+            self.acceleration = -self.acceleration_magnitude
+        elif is_moving_right or last_pressed_key == arcade.key.RIGHT:
+            self.acceleration = self.acceleration_magnitude
+        else:
+            self.acceleration = 0
+
+        #        if is_moving_left or is_moving_right or is_switching_direction:
+        self.change_x += self.acceleration
+        if self.change_x > run_speed:
+            self.change_x = run_speed
+        elif self.change_x < -run_speed:
+            self.change_x = -run_speed
+
+    def update_jump_velocity(self, keys_pressed):
+        """Doc."""
+
+        _, jump_speed = self.speeds
 
         if keys_pressed[arcade.key.SPACE]:
             self.change_y = jump_speed
@@ -557,6 +616,8 @@ class PlatformerView(arcade.View):
         # Flag for entering view mode - allows super-user to skim around
         self.view_mode = False
 
+        self.last_pressed_key = None
+
     def setup(self) -> None:
         """Sets up the game for the current level"""
 
@@ -589,7 +650,10 @@ class PlatformerView(arcade.View):
 
         # Create the player sprite, if they're not already setup
         self.player = Player(
-            game.PLAYER_START_POS, game.PLAYER_MOVE_SPEED, scale=game.CHARACTER_SCALING
+            game.PLAYER_START_POS,
+            game.PLAYER_MOVE_SPEED,
+            game.PLAYER_ACCELERATION_MAGNITUDE,
+            scale=game.CHARACTER_SCALING,
         )
 
         # Setup the popsicle sprite list
@@ -624,7 +688,7 @@ class PlatformerView(arcade.View):
             if self.physics_engine.can_jump():
                 self.keys_pressed[key] = True
                 self.last_pressed_key = key
-                self.player.update_velocity(self.keys_pressed, self.last_pressed_key)
+                self.player.update_jump_velocity(self.keys_pressed)
                 self.physics_engine.increment_jump_counter()
                 # Play the jump sound
                 arcade.play_sound(self.jump_sound)
@@ -647,6 +711,7 @@ class PlatformerView(arcade.View):
         if key in self.keys_pressed.keys():
             self.keys_pressed[key] = False
             self.player.update_velocity(self.keys_pressed, self.last_pressed_key)
+            self.player.update_jump_velocity(self.keys_pressed)
 
     def on_update(self, delta_time: float) -> None:
         """Updates the position of all screen objects
@@ -664,15 +729,23 @@ class PlatformerView(arcade.View):
             self.popsicles.update_animation(delta_time)
             for popsicle in self.popsicles:
                 popsicle.move()
+                # Check if popsicles flew off-screen
+                if not 0 < popsicle.center_x < self.map_width:
+                    popsicle.kill()
+                # Check if popsicle hit ground
                 ground_hit = arcade.check_for_collision_with_list(
                     sprite=popsicle, sprite_list=self.map_sprite_lists["ground"]
                 )
                 if ground_hit:
-                    popsicle.stop()
+                    popsicle.bounce()
+                    # melt popsicle
+                    popsicle.melt(delta_time)
 
         # Update player movement based on the physics engine
         self.physics_engine.update()
         self.physics_engine.can_jump()
+        self.player.update_velocity(self.keys_pressed, self.last_pressed_key)
+        self.player.apply_friction(self.keys_pressed)
 
         # Throw Popsicle
         if (new_popsicle := self.ice_cream_truck.throw_popsicle()) is not None:
@@ -697,7 +770,7 @@ class PlatformerView(arcade.View):
 
             for popsicle in popsicles_hit:
                 # Add the coin score to our score
-                self.score += int(popsicle.point_value)
+                self.score += popsicle.point_value
                 # Play the coin sound
                 arcade.play_sound(self.coin_sound)
                 # Remove the popsicle

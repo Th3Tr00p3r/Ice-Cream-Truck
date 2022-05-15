@@ -8,6 +8,7 @@ from helper import ScreenProps, Vector
 
 # Physics
 GRAVITY = 1.0
+FRICTION = 0.95
 
 # Window dimensions
 SCREEN_PROPS = ScreenProps(1500, 975)
@@ -23,16 +24,17 @@ BOTTOM_VIEWPORT_MARGIN = 0
 # Scaling Constants
 MAP_SCALING = 0.5
 CHARACTER_SCALING = 1.1
-ICE_CREAM_TRUCK_SCALING = 0.4
-POPSICLE_SCALING = 0.4
+ICE_CREAM_TRUCK_SCALING = 0.6
+POPSICLE_SCALING = 0.5
 
 # General Sprite Constants
 FACE_DIRECTION = SimpleNamespace(RIGHT=0, LEFT=1)
 
 # Player constants
+PLAYER_ACCELERATION_MAGNITUDE = 0.9  # TESTESTEST
 PLAYER_MOVE_SPEED = Vector(10, 20)  # pixels per frame
 PLAYER_START_POS = Vector(100, 300)  # pixels from bottom, pixels from left
 
 # Ice Cream Truck constants
-TRUCK_START_POS = Vector(1000, 260)  # pixels from bottom, pixels from left
+TRUCK_START_POS = Vector(1000, 310)  # pixels from bottom, pixels from left
 POPSICLE_COLORS = ["red", "blue", "green", "yellow", "brown", "white", "purple", "pink"]
