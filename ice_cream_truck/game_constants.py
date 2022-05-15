@@ -22,8 +22,9 @@ BOTTOM_VIEWPORT_MARGIN = 0
 
 # Scaling Constants
 MAP_SCALING = 0.5
-CHARACTER_SCALING = 1.0
+CHARACTER_SCALING = 1.1
 ICE_CREAM_TRUCK_SCALING = 0.4
+POPSICLE_SCALING = 0.4
 
 # General Sprite Constants
 FACE_DIRECTION = SimpleNamespace(RIGHT=0, LEFT=1)
@@ -34,3 +35,4 @@ PLAYER_START_POS = Vector(100, 300)  # pixels from bottom, pixels from left
 
 # Ice Cream Truck constants
 TRUCK_START_POS = Vector(1000, 260)  # pixels from bottom, pixels from left
+POPSICLE_COLORS = ["red", "blue", "green", "yellow", "brown", "white", "purple", "pink"]

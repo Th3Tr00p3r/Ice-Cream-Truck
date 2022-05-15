@@ -6,6 +6,7 @@ import math
 from collections import namedtuple
 from contextlib import suppress
 from pathlib import Path
+from random import choice, randint, random, uniform
 from types import SimpleNamespace
 
 import arcade
@@ -32,23 +33,47 @@ class BasicSprite(arcade.Sprite):
             LEFT=arcade.load_texture(filename, flipped_horizontally=True),
         )
 
-    def set_position(self, position: Vector):
+
+class Popsicle(BasicSprite):
+    """
+    An collectible popsicle sprite. Gets thrown away by the 'Ice-Cream Man' and possibly collected by the 'Cat'.
+    """
+
+    # TODO: Popsicles left on floor melt and yield less points? or fall off screen? or remain on floor?
+
+    MAIN_PATH = ASSETS_PATH / "images" / "items"
+    pop_color_filename_dict = {
+        color: f"popsicle{color.capitalize()}.png" for color in game.POPSICLE_COLORS
+    }
+    BASE_POINTS = 10
+
+    def __init__(
+        self, init_position: Vector, throw_speed_ppf: float, throw_angle_degrees: int, color: str
+    ) -> None:
+
+        filename = self.pop_color_filename_dict[color]
+        x_speed = -throw_speed_ppf * math.cos(throw_angle_degrees * math.pi / 180)
+        y_speed = throw_speed_ppf * math.sin(throw_angle_degrees * math.pi / 180)
+        self.popsicle_color = color
+        self.point_value = self.BASE_POINTS
+        super().__init__(init_position, self.MAIN_PATH / filename, scale=game.POPSICLE_SCALING)
+
+        self.change_x = x_speed
+        self.change_y = y_speed
+        self.change_angle = -math.copysign(1, x_speed) * throw_speed_ppf
+
+    def move(self):
         """Doc."""
 
-        self.center_x, center_y = position
-
-    def set_velocity(self, velocity: Vector):
-        """Doc."""
-
-        self.change_x, self.change_y = velocity
-
-    def move(self, delta_time: float):
-        """Doc."""
-
+        # change position
         self.center_x += self.change_x
         self.center_y += self.change_y
-        with suppress(AttributeError):
-            self.angle += self.change_angle
+
+        # change speed (due to 'gravity')
+        self.change_y -= game.GRAVITY * 0.1
+
+        # spin
+        self.angle += self.change_angle
 
     def stop(self, should_stop_y=True):
         """Doc."""
@@ -60,41 +85,12 @@ class BasicSprite(arcade.Sprite):
         self.angle = 0
 
 
-class Popsicle(BasicSprite):
-    """
-    An collectible popsicle sprite. Gets thrown away by the 'Ice-Cream Man' and possibly collected by the 'Cat'.
-    """
-
-    # TODO: Popsicles left on floor melt and yield less points? or fall off screen? or remain on floor?
-
-    MAIN_PATH = ASSETS_PATH / "images" / "items"
-    POPSICLE_COLORS = {"red", "blue", "green", "yellow", "brown", "white", "purple", "pink"}
-    pop_color_filename_dict = {
-        color: f"popsicle{color.capitalize()}.png" for color in POPSICLE_COLORS
-    }
-    BASE_POINTS = 10
-
-    def __init__(
-        self, init_position: Vector, throw_speed_ppf: float, throw_angle_degrees: int, color: str
-    ) -> None:
-
-        filename = self.pop_color_filename_dict[color]
-        init_kwargs = dict(
-            change_x=-throw_speed_ppf * math.cos(throw_angle_degrees),
-            change_y=throw_speed_ppf * math.sin(throw_angle_degrees),
-            change_angle=math.copysign(1, self.change_x) * throw_speed_ppf,
-        )
-        self.color = color
-        self.point_value = self.BASE_POINTS
-        super().__init__(init_position, self.MAIN_PATH / filename, **init_kwargs)
-
-
 class IceCreamTruck(BasicSprite):
     """Doc."""
 
     MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "enemies"
 
-    def __init__(self, init_position: Vector, throw_freq_hz: float, **kwargs):
+    def __init__(self, init_position: Vector, throw_probability_frame: float, **kwargs):
         super().__init__(init_position, self.MAIN_TEXTURE_PATH / "truckIceCream1.png", **kwargs)
 
         # Default to face-right
@@ -111,14 +107,18 @@ class IceCreamTruck(BasicSprite):
         # Set the initial texture
         self.texture = self.textures_types.standing.RIGHT
 
-        self.throw_freq_hz = throw_freq_hz
+        self.throw_probability_frame = throw_probability_frame
 
     def throw_popsicle(self):
         """Throw a random (color, angle) popsicle."""
 
-        Popsicle(
-            Vector(self.center_x, self.center_y),
-        )
+        if random() < self.throw_probability_frame:
+            return Popsicle(
+                Vector(self.center_x, self.center_y),
+                throw_speed_ppf=game.PLAYER_MOVE_SPEED[0] * uniform(0.25, 1),
+                throw_angle_degrees=randint(45, 135),
+                color=choice(game.POPSICLE_COLORS),
+            )
 
 
 class Player(BasicSprite):
@@ -152,9 +152,14 @@ class Player(BasicSprite):
         self.texture = self.textures_types.standing.RIGHT
 
         self.speeds = speeds
-        self.spin_speed = 15
+        self.spin_speed = 30
+
+        # for setting running animation frequency
+        self.time_accumulator = 0.0
 
     def update_animation(self, delta_time: float, jumps_since_ground: int):
+
+        self.time_accumulator += delta_time
 
         # stop spinning
         self.change_angle = 0
@@ -166,7 +171,7 @@ class Player(BasicSprite):
             self.face_direction = game.FACE_DIRECTION.RIGHT
 
         # Jumping/Stalling/Falling animation
-        if jumps_since_ground == 1:
+        if jumps_since_ground >= 1:
             if 5 < self.change_y:
                 self.texture = self.textures_types.jumping[self.face_direction]
             elif -5 < self.change_y < 5:
@@ -174,17 +179,21 @@ class Player(BasicSprite):
             elif self.change_y < -5:
                 self.texture = self.textures_types.falling[self.face_direction]
 
-        elif jumps_since_ground == 2:
-            self.texture = self.textures_types.stalling[self.face_direction]
-            if self.face_direction == game.FACE_DIRECTION.RIGHT:
-                self.change_angle = -self.spin_speed
-            else:
-                self.change_angle = self.spin_speed
+            if jumps_since_ground >= 2:
+                if self.change_y > -5:
+                    if self.face_direction == game.FACE_DIRECTION.RIGHT:
+                        self.change_angle = -self.spin_speed
+                    else:
+                        self.change_angle = self.spin_speed
+                else:
+                    self.angle = 0
 
         # Running animation
         elif self.change_x != 0:
             self.angle = 0
-            self.cur_texture += 1
+            if self.time_accumulator >= 0.2 / len(self.textures_types.running):
+                self.cur_texture += 1
+                self.time_accumulator = 0
             if self.cur_texture == len(self.textures_types.running):
                 self.cur_texture = 0
             self.texture = self.textures_types.running[self.cur_texture][self.face_direction]
@@ -197,7 +206,6 @@ class Player(BasicSprite):
     def update_velocity(self, keys_pressed, last_pressed_key):
         """Doc."""
 
-        self.stop(should_stop_y=False)
         run_speed, jump_speed = self.speeds
 
         is_moving_left = keys_pressed[arcade.key.LEFT] and not keys_pressed[arcade.key.RIGHT]
@@ -210,6 +218,8 @@ class Player(BasicSprite):
         if keys_pressed[arcade.key.SPACE]:
             self.change_y = jump_speed
             keys_pressed[arcade.key.SPACE] = False
+        elif self.change_y > 0:
+            self.change_y *= 0.5
 
 
 class GameWindow(arcade.Window):
@@ -505,7 +515,7 @@ class GameOverView(arcade.View):
             self.window.show_view(self.game_view)
 
         elif key == arcade.key.ESCAPE:
-            raise SystemExit(0)
+            self.window.close()
 
 
 class PlatformerView(arcade.View):
@@ -573,9 +583,8 @@ class PlatformerView(arcade.View):
         self.map_width = (map.width - 1) * map.tile_width * game.MAP_SCALING
 
         # Create the Ice Cream Man and Truck
-        self.throw_freq_hz = 60
         self.ice_cream_truck = IceCreamTruck(
-            game.TRUCK_START_POS, self.throw_freq_hz, scale=game.ICE_CREAM_TRUCK_SCALING
+            game.TRUCK_START_POS, 0.01, scale=game.ICE_CREAM_TRUCK_SCALING
         )
 
         # Create the player sprite, if they're not already setup
@@ -584,7 +593,7 @@ class PlatformerView(arcade.View):
         )
 
         # Setup the popsicle sprite list
-        self.popsicle: arcade.SpriteList = []
+        self.popsicles = arcade.SpriteList()
 
         # Reset the viewport
         self.view_left = 0
@@ -646,21 +655,6 @@ class PlatformerView(arcade.View):
             delta_time -- How much time since the last call
         """
 
-        # Are we in view mode? If so, update nothing, but skew the view
-        if self.view_mode:
-            # Scroll the viewport
-            self.view_bottom = int(self.view_bottom)
-            self.view_left = int(self.view_left)
-
-            # Do the scrolling
-            arcade.set_viewport(
-                left=self.view_left,
-                right=game.SCREEN_PROPS.width + self.view_left,
-                bottom=self.view_bottom,
-                top=game.SCREEN_PROPS.height + self.view_bottom,
-            )
-            return
-
         # Update the animations for our map objects as well
         self.map_sprite_lists["background"].update_animation(delta_time)
 
@@ -680,6 +674,10 @@ class PlatformerView(arcade.View):
         self.physics_engine.update()
         self.physics_engine.can_jump()
 
+        # Throw Popsicle
+        if (new_popsicle := self.ice_cream_truck.throw_popsicle()) is not None:
+            self.popsicles.append(new_popsicle)
+
         # Update the player animation
         self.player.update_animation(delta_time, self.physics_engine.jumps_since_ground)
 
@@ -688,6 +686,8 @@ class PlatformerView(arcade.View):
             self.player.left = 0
         if self.player.right >= self.map_width:
             self.player.right = self.map_width
+        if self.player.bottom < 0:
+            self.player.bottom = 0
 
         with suppress(TypeError):
             # Check if we've picked up a popsicle
@@ -772,6 +772,7 @@ class PlatformerView(arcade.View):
         #        self.enemies.draw()
 
         self.ice_cream_truck.draw()
+        self.popsicles.draw()
         self.player.draw()
 
         # Draw the score in the lower left
