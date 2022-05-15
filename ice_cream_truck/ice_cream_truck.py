@@ -185,6 +185,7 @@ class Player(BasicSprite):
                 self.load_texture_pair(self.MAIN_TEXTURE_PATH / f"catRunning{i}.png")
                 for i in (1, 2, 3, 4)
             ],
+            dashing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning4.png"),
             sliding=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning1.png"),
             jumping=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catJumping.png"),
             stalling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStalling.png"),
@@ -199,10 +200,10 @@ class Player(BasicSprite):
         self.acceleration = 0.0
         self.spin_speed = 30
 
-        self.is_rolling = False
-        self.is_rolling_left = False
-        self.is_rolling_right = False
-        self.roll_start = None
+        self.is_ground_dashing = False
+        self.is_ground_dashing_left = False
+        self.is_ground_dashing_right = False
+        self.ground_dash_start = None
 
         # for setting running animation frequency
         self.time_accumulator = 0.0
@@ -238,6 +239,10 @@ class Player(BasicSprite):
                 else:
                     self.angle = 0
 
+        # Ground dash animation
+        elif self.is_ground_dashing:
+            self.texture = self.textures_types.dashing[self.face_direction]
+
         # Running animation
         elif abs(self.change_x) > self.speeds.RUN * 0.2:
             self.angle = 0
@@ -270,44 +275,43 @@ class Player(BasicSprite):
         is_moving_left = is_only_left_pressed or is_changing_to_left
         is_moving_right = is_only_right_pressed or is_changing_to_right
 
-        is_prepared_to_roll = (
+        is_prepared_to_ground_dash = (
             keys_pressed[arcade.key.DOWN] and is_on_ground and abs(self.change_x) == self.speeds.RUN
         )
-        is_rolling_left = is_prepared_to_roll and is_only_left_pressed
-        is_rolling_right = is_prepared_to_roll and is_only_right_pressed
-        is_rolling = is_rolling_left or is_rolling_right
+        is_ground_dashing_left = is_prepared_to_ground_dash and is_only_left_pressed
+        is_ground_dashing_right = is_prepared_to_ground_dash and is_only_right_pressed
+        is_ground_dashing = is_ground_dashing_left or is_ground_dashing_right
 
         # TESTESTEST
-        #        print("is_rolling: ", is_rolling)
+        #        print("is_ground_dashing: ", is_ground_dashing)
         # / TESTESTEST
 
-        if is_rolling and not self.is_rolling:
-            self.is_rolling = True
+        if is_ground_dashing and not self.is_ground_dashing:
+            self.is_ground_dashing = True
             keys_pressed[arcade.key.DOWN] = False
-            self.roll_start = self.center_x
-            self.is_rolling_left = is_rolling_left
-            self.is_rolling_right = is_rolling_right
+            self.ground_dash_start = self.center_x
+            self.is_ground_dashing_left = is_ground_dashing_left
+            self.is_ground_dashing_right = is_ground_dashing_right
 
         is_close_to_edges = (
             abs(self.center_x - self.map_width) < self.width / 2 or self.center_x < self.width / 2
         )
-        print("is_close_to_edges: ", is_close_to_edges) if is_close_to_edges else None
-        should_keep_rolling = (
-            self.roll_start is not None
-            and abs(self.center_x - self.roll_start) < self.width * 3
+        should_keep_ground_dashing = (
+            self.ground_dash_start is not None
+            and abs(self.center_x - self.ground_dash_start) < self.width * 3
             and not is_close_to_edges
         )
-        if should_keep_rolling:
-            if self.is_rolling_left:
-                self.change_x = -self.speeds.ROLL
-            elif self.is_rolling_right:
-                self.change_x = self.speeds.ROLL
-        elif self.is_rolling:
-            self.is_rolling = False
+        if should_keep_ground_dashing:
+            if self.is_ground_dashing_left:
+                self.change_x = -self.speeds.DASH
+            elif self.is_ground_dashing_right:
+                self.change_x = self.speeds.DASH
+        elif self.is_ground_dashing:
+            self.is_ground_dashing = False
             self.change_x = 0
-            self.roll_start = None
+            self.ground_dash_start = None
 
-        elif not self.is_rolling:
+        elif not self.is_ground_dashing:
             if is_moving_left:
                 self.acceleration = -self.acceleration_magnitude
             elif is_moving_right:
@@ -326,7 +330,7 @@ class Player(BasicSprite):
 
         has_jumped = False
 
-        if self.is_rolling:
+        if self.is_ground_dashing:
             keys_pressed[arcade.key.SPACE] = False
         elif keys_pressed[arcade.key.SPACE]:
             self.change_y = self.speeds.JUMP
@@ -740,7 +744,7 @@ class PlatformerView(arcade.View):
             self.keys_pressed[key] = True
             self.last_pressed_key = key
 
-        # Check for roll
+        # Check for ground_dash
         if key == arcade.key.DOWN:
             self.keys_pressed[key] = True
 

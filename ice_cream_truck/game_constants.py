@@ -32,7 +32,7 @@ FACE_DIRECTION = SimpleNamespace(RIGHT=0, LEFT=1)
 
 # Player constants
 PLAYER_ACCELERATION_MAGNITUDE = 0.75  # TESTESTEST
-PLAYER_MOVE_SPEED = SimpleNamespace(RUN=10, JUMP=20, ROLL=30)  # pixels per frame
+PLAYER_MOVE_SPEED = SimpleNamespace(RUN=10, JUMP=20, DASH=30)  # pixels per frame
 PLAYER_START_POS = Vector(100, 300)  # pixels from bottom, pixels from left
 
 # Ice Cream Truck constants
