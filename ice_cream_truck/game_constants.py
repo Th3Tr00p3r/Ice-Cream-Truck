@@ -31,10 +31,10 @@ POPSICLE_SCALING = 0.5
 FACE_DIRECTION = SimpleNamespace(RIGHT=0, LEFT=1)
 
 # Player constants
-PLAYER_ACCELERATION_MAGNITUDE = 0.9  # TESTESTEST
-PLAYER_MOVE_SPEED = Vector(10, 20)  # pixels per frame
+PLAYER_ACCELERATION_MAGNITUDE = 0.75  # TESTESTEST
+PLAYER_MOVE_SPEED = SimpleNamespace(RUN=10, JUMP=20, ROLL=30)  # pixels per frame
 PLAYER_START_POS = Vector(100, 300)  # pixels from bottom, pixels from left
 
 # Ice Cream Truck constants
-TRUCK_START_POS = Vector(1000, 310)  # pixels from bottom, pixels from left
+TRUCK_START_POS = Vector(750, 305)  # pixels from bottom, pixels from left
 POPSICLE_COLORS = ["red", "blue", "green", "yellow", "brown", "white", "purple", "pink"]

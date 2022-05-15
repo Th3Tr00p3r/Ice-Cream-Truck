@@ -146,7 +146,7 @@ class IceCreamTruck(BasicSprite):
         if random() < self.throw_probability_frame:
             return Popsicle(
                 Vector(self.center_x, self.center_y),
-                throw_speed_ppf=game.PLAYER_MOVE_SPEED[0] * uniform(0.25, 1),
+                throw_speed_ppf=game.PLAYER_MOVE_SPEED.RUN * uniform(0.25, 1),
                 throw_angle_degrees=randint(45, 135),
                 color=choice(game.POPSICLE_COLORS),
             )
@@ -159,10 +159,18 @@ class Player(BasicSprite):
     RUNNING_ANIMATION_FACTOR = 0.2
 
     def __init__(
-        self, init_position: Vector, speeds: Vector, acceleration_magnitude: float, **kwargs
+        self,
+        init_position: Vector,
+        speeds: SimpleNamespace,
+        acceleration_magnitude: float,
+        map_width,
+        **kwargs,
     ):
 
         super().__init__(init_position, self.MAIN_TEXTURE_PATH / "catStanding.png", **kwargs)
+
+        # keep map width
+        self.map_width = map_width
 
         # Default to face-right
         self.face_direction = game.FACE_DIRECTION.RIGHT
@@ -188,8 +196,13 @@ class Player(BasicSprite):
 
         self.speeds = speeds
         self.acceleration_magnitude = acceleration_magnitude
-        self.acceleration = 0
+        self.acceleration = 0.0
         self.spin_speed = 30
+
+        self.is_rolling = False
+        self.is_rolling_left = False
+        self.is_rolling_right = False
+        self.roll_start = None
 
         # for setting running animation frequency
         self.time_accumulator = 0.0
@@ -226,10 +239,10 @@ class Player(BasicSprite):
                     self.angle = 0
 
         # Running animation
-        elif abs(self.change_x) > self.speeds[0] * 0.2:
+        elif abs(self.change_x) > self.speeds.RUN * 0.2:
             self.angle = 0
             if self.time_accumulator >= self.RUNNING_ANIMATION_FACTOR / (
-                abs(self.change_x) / self.speeds[0]
+                abs(self.change_x) / self.speeds.RUN
             ) / len(self.textures_types.running):
                 self.cur_texture += 1
                 self.time_accumulator = 0
@@ -238,7 +251,7 @@ class Player(BasicSprite):
             self.texture = self.textures_types.running[self.cur_texture][self.face_direction]
 
         # Sliding animation
-        elif 0 < abs(self.change_x) <= self.speeds[0] * 0.2:
+        elif 0 < abs(self.change_x) <= self.speeds.RUN * 0.2:
             self.texture = self.textures_types.sliding[self.face_direction]
 
         # Idle animation
@@ -246,39 +259,83 @@ class Player(BasicSprite):
             self.angle = 0
             self.texture = self.textures_types.standing[self.face_direction]
 
-    def update_velocity(self, keys_pressed, last_pressed_key):
-        """Doc."""
-        # TODO: adapt for using acceleration instead of instant speed
-
-        run_speed, _ = self.speeds
-
-        is_moving_left = keys_pressed[arcade.key.LEFT] and not keys_pressed[arcade.key.RIGHT]
-        is_moving_right = keys_pressed[arcade.key.RIGHT] and not keys_pressed[arcade.key.LEFT]
-
-        if is_moving_left or last_pressed_key == arcade.key.LEFT:
-            self.acceleration = -self.acceleration_magnitude
-        elif is_moving_right or last_pressed_key == arcade.key.RIGHT:
-            self.acceleration = self.acceleration_magnitude
-        else:
-            self.acceleration = 0
-
-        #        if is_moving_left or is_moving_right or is_switching_direction:
-        self.change_x += self.acceleration
-        if self.change_x > run_speed:
-            self.change_x = run_speed
-        elif self.change_x < -run_speed:
-            self.change_x = -run_speed
-
-    def update_jump_velocity(self, keys_pressed):
+    def update_velocity(self, keys_pressed, last_pressed_key, is_on_ground: bool):
         """Doc."""
 
-        _, jump_speed = self.speeds
+        is_only_left_pressed = keys_pressed[arcade.key.LEFT] and not keys_pressed[arcade.key.RIGHT]
+        is_only_right_pressed = keys_pressed[arcade.key.RIGHT] and not keys_pressed[arcade.key.LEFT]
+        are_both_pressed = keys_pressed[arcade.key.RIGHT] and keys_pressed[arcade.key.LEFT]
+        is_changing_to_left = are_both_pressed and last_pressed_key == arcade.key.LEFT
+        is_changing_to_right = are_both_pressed and last_pressed_key == arcade.key.RIGHT
+        is_moving_left = is_only_left_pressed or is_changing_to_left
+        is_moving_right = is_only_right_pressed or is_changing_to_right
 
-        if keys_pressed[arcade.key.SPACE]:
-            self.change_y = jump_speed
+        is_prepared_to_roll = (
+            keys_pressed[arcade.key.DOWN] and is_on_ground and abs(self.change_x) == self.speeds.RUN
+        )
+        is_rolling_left = is_prepared_to_roll and is_only_left_pressed
+        is_rolling_right = is_prepared_to_roll and is_only_right_pressed
+        is_rolling = is_rolling_left or is_rolling_right
+
+        # TESTESTEST
+        #        print("is_rolling: ", is_rolling)
+        # / TESTESTEST
+
+        if is_rolling and not self.is_rolling:
+            self.is_rolling = True
+            keys_pressed[arcade.key.DOWN] = False
+            self.roll_start = self.center_x
+            self.is_rolling_left = is_rolling_left
+            self.is_rolling_right = is_rolling_right
+
+        is_close_to_edges = (
+            abs(self.center_x - self.map_width) < self.width / 2 or self.center_x < self.width / 2
+        )
+        print("is_close_to_edges: ", is_close_to_edges) if is_close_to_edges else None
+        should_keep_rolling = (
+            self.roll_start is not None
+            and abs(self.center_x - self.roll_start) < self.width * 3
+            and not is_close_to_edges
+        )
+        if should_keep_rolling:
+            if self.is_rolling_left:
+                self.change_x = -self.speeds.ROLL
+            elif self.is_rolling_right:
+                self.change_x = self.speeds.ROLL
+        elif self.is_rolling:
+            self.is_rolling = False
+            self.change_x = 0
+            self.roll_start = None
+
+        elif not self.is_rolling:
+            if is_moving_left:
+                self.acceleration = -self.acceleration_magnitude
+            elif is_moving_right:
+                self.acceleration = self.acceleration_magnitude
+            else:
+                self.acceleration = 0
+
+            self.change_x += self.acceleration
+            if self.change_x > self.speeds.RUN:
+                self.change_x = self.speeds.RUN
+            elif self.change_x < -self.speeds.RUN:
+                self.change_x = -self.speeds.RUN
+
+    def update_jump_velocity(self, keys_pressed) -> bool:
+        """Doc."""
+
+        has_jumped = False
+
+        if self.is_rolling:
             keys_pressed[arcade.key.SPACE] = False
+        elif keys_pressed[arcade.key.SPACE]:
+            self.change_y = self.speeds.JUMP
+            keys_pressed[arcade.key.SPACE] = False
+            has_jumped = True
         elif self.change_y > 0:
             self.change_y *= 0.5
+
+        return has_jumped
 
 
 class GameWindow(arcade.Window):
@@ -606,6 +663,7 @@ class PlatformerView(arcade.View):
         self.keys_pressed = {
             arcade.key.LEFT: False,
             arcade.key.RIGHT: False,
+            arcade.key.DOWN: False,
             arcade.key.SPACE: False,
         }
 
@@ -653,6 +711,7 @@ class PlatformerView(arcade.View):
             game.PLAYER_START_POS,
             game.PLAYER_MOVE_SPEED,
             game.PLAYER_ACCELERATION_MAGNITUDE,
+            self.map_width,
             scale=game.CHARACTER_SCALING,
         )
 
@@ -680,18 +739,21 @@ class PlatformerView(arcade.View):
         if key in (arcade.key.LEFT, arcade.key.RIGHT):
             self.keys_pressed[key] = True
             self.last_pressed_key = key
-            self.player.update_velocity(self.keys_pressed, self.last_pressed_key)
-            self.last_pressed_key = None
+
+        # Check for roll
+        if key == arcade.key.DOWN:
+            self.keys_pressed[key] = True
 
         # Check if we can jump
         elif key == arcade.key.SPACE:
             if self.physics_engine.can_jump():
                 self.keys_pressed[key] = True
-                self.last_pressed_key = key
-                self.player.update_jump_velocity(self.keys_pressed)
-                self.physics_engine.increment_jump_counter()
-                # Play the jump sound
-                arcade.play_sound(self.jump_sound)
+                has_jumped = self.player.update_jump_velocity(self.keys_pressed)
+                if has_jumped:
+                    self.physics_engine.increment_jump_counter()
+                    self.is_on_ground = False
+                    # Play the jump sound
+                    arcade.play_sound(self.jump_sound)
 
         # Did the user want to pause?
         elif key == arcade.key.ESCAPE:
@@ -710,7 +772,7 @@ class PlatformerView(arcade.View):
 
         if key in self.keys_pressed.keys():
             self.keys_pressed[key] = False
-            self.player.update_velocity(self.keys_pressed, self.last_pressed_key)
+            self.player.update_velocity(self.keys_pressed, self.last_pressed_key, self.is_on_ground)
             self.player.update_jump_velocity(self.keys_pressed)
 
     def on_update(self, delta_time: float) -> None:
@@ -744,7 +806,9 @@ class PlatformerView(arcade.View):
         # Update player movement based on the physics engine
         self.physics_engine.update()
         self.physics_engine.can_jump()
-        self.player.update_velocity(self.keys_pressed, self.last_pressed_key)
+        self.is_on_ground = self.physics_engine.jumps_since_ground == 0
+        self.player.update_velocity(self.keys_pressed, self.last_pressed_key, self.is_on_ground)
+        #        self.last_pressed_key = None
         self.player.apply_friction(self.keys_pressed)
 
         # Throw Popsicle
