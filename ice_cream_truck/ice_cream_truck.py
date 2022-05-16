@@ -101,7 +101,7 @@ class Popsicle(BasicSprite):
 
         self.change_x = 0
         if should_stop_y:
-            self.change_y = 0
+            self.change_y = 0.0
         self.change_angle = 0
         self.angle = 0
 
@@ -185,7 +185,7 @@ class Player(BasicSprite):
                 self.load_texture_pair(self.MAIN_TEXTURE_PATH / f"catRunning{i}.png")
                 for i in (1, 2, 3, 4)
             ],
-            dashing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning4.png"),
+            pounceing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning4.png"),
             sliding=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning1.png"),
             jumping=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catJumping.png"),
             stalling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStalling.png"),
@@ -200,10 +200,10 @@ class Player(BasicSprite):
         self.acceleration = 0.0
         self.spin_speed = 30
 
-        self.is_ground_dashing = False
-        self.is_ground_dashing_left = False
-        self.is_ground_dashing_right = False
-        self.ground_dash_start = None
+        self.is_pouncing = False
+        self.is_pouncing_left = False
+        self.is_pouncing_right = False
+        self.pounce_start = None
 
         # for setting running animation frequency
         self.time_accumulator = 0.0
@@ -222,7 +222,7 @@ class Player(BasicSprite):
             self.face_direction = game.FACE_DIRECTION.RIGHT
 
         # Jumping/Stalling/Falling animation
-        if jumps_since_ground >= 1:
+        if jumps_since_ground >= 1 or self.change_y < 0 and not self.is_pouncing:
             if 5 < self.change_y:
                 self.texture = self.textures_types.jumping[self.face_direction]
             elif -5 < self.change_y < 5:
@@ -239,9 +239,9 @@ class Player(BasicSprite):
                 else:
                     self.angle = 0
 
-        # Ground dash animation
-        elif self.is_ground_dashing:
-            self.texture = self.textures_types.dashing[self.face_direction]
+        # pounce animation
+        elif self.is_pouncing:
+            self.texture = self.textures_types.pounceing[self.face_direction]
 
         # Running animation
         elif abs(self.change_x) > self.speeds.RUN * 0.2:
@@ -275,43 +275,40 @@ class Player(BasicSprite):
         is_moving_left = is_only_left_pressed or is_changing_to_left
         is_moving_right = is_only_right_pressed or is_changing_to_right
 
-        is_prepared_to_ground_dash = (
+        is_prepared_to_pounce = (
             keys_pressed[arcade.key.DOWN] and is_on_ground and abs(self.change_x) == self.speeds.RUN
         )
-        is_ground_dashing_left = is_prepared_to_ground_dash and is_only_left_pressed
-        is_ground_dashing_right = is_prepared_to_ground_dash and is_only_right_pressed
-        is_ground_dashing = is_ground_dashing_left or is_ground_dashing_right
+        is_pouncing_left = is_prepared_to_pounce and is_only_left_pressed
+        is_pouncing_right = is_prepared_to_pounce and is_only_right_pressed
+        is_pouncing = is_pouncing_left or is_pouncing_right
 
-        # TESTESTEST
-        #        print("is_ground_dashing: ", is_ground_dashing)
-        # / TESTESTEST
-
-        if is_ground_dashing and not self.is_ground_dashing:
-            self.is_ground_dashing = True
+        if is_pouncing and not self.is_pouncing:
+            self.is_pouncing = True
             keys_pressed[arcade.key.DOWN] = False
-            self.ground_dash_start = self.center_x
-            self.is_ground_dashing_left = is_ground_dashing_left
-            self.is_ground_dashing_right = is_ground_dashing_right
+            self.pounce_start = self.center_x
+            self.is_pouncing_left = is_pouncing_left
+            self.is_pouncing_right = is_pouncing_right
+            self.change_y = 10.0
 
         is_close_to_edges = (
             abs(self.center_x - self.map_width) < self.width / 2 or self.center_x < self.width / 2
         )
-        should_keep_ground_dashing = (
-            self.ground_dash_start is not None
-            and abs(self.center_x - self.ground_dash_start) < self.width * 3
+        should_keep_pouncing = (
+            self.pounce_start is not None
+            and abs(self.center_x - self.pounce_start) < self.width * 3.5
             and not is_close_to_edges
         )
-        if should_keep_ground_dashing:
-            if self.is_ground_dashing_left:
-                self.change_x = -self.speeds.DASH
-            elif self.is_ground_dashing_right:
-                self.change_x = self.speeds.DASH
-        elif self.is_ground_dashing:
-            self.is_ground_dashing = False
+        if should_keep_pouncing:
+            if self.is_pouncing_left:
+                self.change_x = -self.speeds.POUNCE
+            elif self.is_pouncing_right:
+                self.change_x = self.speeds.POUNCE
+        elif self.is_pouncing:
+            self.is_pouncing = False
             self.change_x = 0
-            self.ground_dash_start = None
+            self.pounce_start = None
 
-        elif not self.is_ground_dashing:
+        elif not self.is_pouncing:
             if is_moving_left:
                 self.acceleration = -self.acceleration_magnitude
             elif is_moving_right:
@@ -330,7 +327,7 @@ class Player(BasicSprite):
 
         has_jumped = False
 
-        if self.is_ground_dashing:
+        if self.is_pouncing:
             keys_pressed[arcade.key.SPACE] = False
         elif keys_pressed[arcade.key.SPACE]:
             self.change_y = self.speeds.JUMP
@@ -350,9 +347,22 @@ class GameWindow(arcade.Window):
             width=game.SCREEN_PROPS.width,
             height=game.SCREEN_PROPS.height,
             title=game.SCREEN_TITLE,
+            fullscreen=True,
         )
         self.center_window()
         self.show_view(TitleView())
+
+    def on_key_press(self, key, modifiers):
+        """Called whenever a key is pressed."""
+
+        if modifiers & arcade.key.MOD_ALT and key == arcade.key.ENTER:
+            # User hits s. Flip between full and not full screen.
+            self.set_fullscreen(not self.fullscreen)
+
+            # Instead of a one-to-one mapping, stretch/squash window to match the
+            # constants. This does NOT respect aspect ratio. You'd need to
+            # do a bit of math for that.
+            self.set_viewport(0, game.SCREEN_PROPS.width, 0, game.SCREEN_PROPS.height)
 
 
 class TitleView(arcade.View):
@@ -421,7 +431,7 @@ class TitleView(arcade.View):
             key -- Which key was pressed
             modifiers -- What modifiers were active
         """
-        if key == arcade.key.RETURN:
+        if not modifiers & arcade.key.MOD_ALT and key == arcade.key.RETURN:
             game_view = PlatformerView()
             game_view.setup()
             self.window.show_view(game_view)
@@ -744,7 +754,7 @@ class PlatformerView(arcade.View):
             self.keys_pressed[key] = True
             self.last_pressed_key = key
 
-        # Check for ground_dash
+        # Check for pounce
         if key == arcade.key.DOWN:
             self.keys_pressed[key] = True
 
