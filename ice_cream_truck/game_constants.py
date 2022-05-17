@@ -28,12 +28,14 @@ ICE_CREAM_TRUCK_SCALING = 0.6
 POPSICLE_SCALING = 0.5
 
 # General Sprite Constants
-FACE_DIRECTION = SimpleNamespace(RIGHT=0, LEFT=1)
+FACE_RIGHT = 1
+FACE_LEFT = -1
 
 # Player constants
 PLAYER_ACCELERATION_MAGNITUDE = 0.75  # TESTESTEST
-PLAYER_MOVE_SPEED = SimpleNamespace(RUN=10, JUMP=20, POUNCE=25)  # pixels per frame
+PLAYER_MOVE_SPEED = SimpleNamespace(RUN=10, SLIDE=3, JUMP=20, POUNCE=35)  # pixels per frame
 PLAYER_START_POS = Vector(100, 450)  # pixels from bottom, pixels from left
+N_JUMPS = 2
 
 # Ice Cream Truck constants
 TRUCK_START_POS = Vector(750, 305)  # pixels from bottom, pixels from left

@@ -33,13 +33,19 @@ class BasicSprite(arcade.Sprite):
             LEFT=arcade.load_texture(filename, flipped_horizontally=True),
         )
 
-    def apply_friction(self, keys_pressed):
+    def restrict_position(self, map_width, should_kill=False):
+        """Restrict sprite position so screen width and bottom - either treat as ground/wall or kill"""
 
-        is_stopping = not keys_pressed[arcade.key.RIGHT] and not keys_pressed[arcade.key.LEFT]
-        if is_stopping:
-            self.change_x *= game.FRICTION
-            if abs(self.change_x) < 1:
-                self.change_x = 0
+        if self.left < 0:
+            self.left = 0
+            if should_kill:
+                self.kill()
+        if self.right >= map_width:
+            self.right = map_width
+            if should_kill:
+                self.kill()
+        if self.bottom < 0:
+            self.bottom = 0
 
 
 class Popsicle(BasicSprite):
@@ -53,7 +59,7 @@ class Popsicle(BasicSprite):
     }
     BASE_POINTS = 10
     FROZEN_TIME = 1  # seconds?
-    MELT_RATE = 0.999  # units?
+    MELT_RATE = 0.99  # units?
     alpha: int
 
     def __init__(
@@ -67,6 +73,8 @@ class Popsicle(BasicSprite):
         y_speed = throw_speed_ppf * math.sin(throw_angle_degrees * math.pi / 180)
         self.popsicle_color = color
         self.point_value = self.BASE_POINTS
+
+        self.hitbox = self.texture.hit_box_points
 
         self.change_x = x_speed
         self.change_y = y_speed
@@ -125,18 +133,18 @@ class IceCreamTruck(BasicSprite):
         super().__init__(init_position, self.MAIN_TEXTURE_PATH / "truckIceCream1.png", **kwargs)
 
         # Default to face-right
-        self.face_direction = game.FACE_DIRECTION.RIGHT
+        self.face_direction = game.FACE_RIGHT
 
         # Used for flipping between image sequences
-        self.cur_texture = 0
+        self.texture_idx = 0
 
         # Load textures
-        self.textures_types = SimpleNamespace(
+        self.loaded_textures = SimpleNamespace(
             standing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "truckIceCream1.png"),
         )
 
         # Set the initial texture
-        self.texture = self.textures_types.standing.RIGHT
+        self.texture = self.loaded_textures.standing.RIGHT
 
         self.throw_probability_frame = throw_probability_frame
 
@@ -157,6 +165,9 @@ class Player(BasicSprite):
 
     MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "player"
     RUNNING_ANIMATION_FACTOR = 0.2
+    JUMP_STOP_RATE = 0.9
+    MOVE_STATE_DICT = {0: "STOP", 1: "RIGHT", -1: "LEFT"}
+    texture: arcade.texture.Texture
 
     def __init__(
         self,
@@ -164,179 +175,278 @@ class Player(BasicSprite):
         speeds: SimpleNamespace,
         acceleration_magnitude: float,
         map_width,
+        keys_pressed,
         **kwargs,
     ):
 
         super().__init__(init_position, self.MAIN_TEXTURE_PATH / "catStanding.png", **kwargs)
 
-        # keep map width
+        # get default/initial hitbox
+        self.init_hitbox = self.texture.hit_box_points
+
+        # hold map width
         self.map_width = map_width
 
+        # hold pressed keys
+        self.keys_pressed = keys_pressed
+
+        # initialize state
+        self.move_state = "STOP"
+        self.state = SimpleNamespace(
+            is_facing_left=False,
+            jump=SimpleNamespace(
+                can_jump=False,
+                is_jumping=False,
+                is_falling=False,
+            ),
+            pounce=SimpleNamespace(
+                can_pounce=False,
+                is_pouncing=False,
+                finishing_pounce=False,
+                recovery_timer=0,
+            ),
+            is_near_edge=False,
+            is_in_air=False,
+        )
+
         # Default to face-right
-        self.face_direction = game.FACE_DIRECTION.RIGHT
+        self.face_direction = game.FACE_RIGHT
 
         # Used for flipping between image sequences
-        self.cur_texture = 0
+        self.texture_idx = 0
 
         # Load textures
-        self.textures_types = SimpleNamespace(
+        self.loaded_textures = SimpleNamespace(
             standing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStanding.png"),
             running=[
                 self.load_texture_pair(self.MAIN_TEXTURE_PATH / f"catRunning{i}.png")
                 for i in (1, 2, 3, 4)
             ],
-            pounceing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning4.png"),
+            pouncing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning4.png"),
             sliding=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning1.png"),
             jumping=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catJumping.png"),
             stalling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStalling.png"),
             falling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catFalling.png"),
         )
-
-        # Set the initial texture
-        self.texture = self.textures_types.standing.RIGHT
+        self.hitboxes = SimpleNamespace(
+            **{
+                name: (
+                    txtr[0][0].hit_box_points if isinstance(txtr, list) else txtr[0].hit_box_points
+                )
+                for name, txtr in vars(self.loaded_textures).items()
+            }
+        )
 
         self.speeds = speeds
+        self.max_run_speed = self.speeds.RUN
         self.acceleration_magnitude = acceleration_magnitude
         self.acceleration = 0.0
         self.spin_speed = 30
 
-        self.is_pouncing = False
-        self.is_pouncing_left = False
-        self.is_pouncing_right = False
-        self.pounce_start = None
-
         # for setting running animation frequency
         self.time_accumulator = 0.0
 
+    def update_state(self, can_jump, n_jumps_since_ground, **kwargs):
+        """Doc."""
+
+        # Figure out if we need to flip face left or right
+        if self.acceleration < 0:
+            self.face_direction = game.FACE_LEFT
+            self.state.is_facing_left = int(True)
+        elif self.acceleration > 0:
+            self.face_direction = game.FACE_RIGHT
+            self.state.is_facing_left = int(False)
+
+        # Check if near edge
+        self.state.is_near_edge = (
+            abs(self.center_x - self.map_width) < self.width / 2 or self.center_x < self.width / 2
+        )
+
+        # store 'can_jump' from the physics engine
+        self.state.jump.can_jump = can_jump
+        self.state.jump.is_jumping = bool(n_jumps_since_ground)
+
+        # determine if can pounce (is on ground and running fast enough)
+        self.state.pounce.can_pounce = (
+            (self.state.pounce.recovery_timer == 0)
+            and not self.state.jump.is_jumping
+            and (abs(self.change_x) == self.speeds.RUN)
+            and not self.state.is_near_edge
+        )
+        self.state.pounce.is_pouncing = abs(self.change_x) == self.speeds.POUNCE and not can_jump
+        self.state.pounce.finishing_pounce = abs(self.change_x) == self.speeds.POUNCE and can_jump
+
+        # pounce recovery
+        if self.state.pounce.finishing_pounce:
+            self.state.pounce.recovery_timer = 50
+        elif self.state.pounce.recovery_timer > 0:
+            self.state.pounce.recovery_timer -= 1
+
+        # check if falling
+        self.state.jump.is_falling = self.change_y < 0
+
+        # check if in air
+        self.state.is_in_air = self.state.jump.is_jumping or self.state.pounce.is_pouncing
+
+        self._update_move_direction()
+
+    def _update_move_direction(self):
+        """Decide if player is moving left, moving right, or stopping, based on pressed keys"""
+
+        is_only_left_pressed = (
+            self.keys_pressed[arcade.key.LEFT] and not self.keys_pressed[arcade.key.RIGHT]
+        )
+        is_only_right_pressed = (
+            self.keys_pressed[arcade.key.RIGHT] and not self.keys_pressed[arcade.key.LEFT]
+        )
+        are_both_pressed = (
+            self.keys_pressed[arcade.key.RIGHT] and self.keys_pressed[arcade.key.LEFT]
+        )
+        are_none_pressed = (
+            not self.keys_pressed[arcade.key.RIGHT] and not self.keys_pressed[arcade.key.LEFT]
+        )
+        is_changing_to_left = are_both_pressed and self.keys_pressed["LAST"] == arcade.key.LEFT
+        is_changing_to_right = are_both_pressed and self.keys_pressed["LAST"] == arcade.key.RIGHT
+        is_moving_left = is_only_left_pressed or is_changing_to_left
+        is_moving_right = is_only_right_pressed or is_changing_to_right
+        self.state.was_moving_left = (
+            are_none_pressed and self.keys_pressed["LAST"] == arcade.key.LEFT
+        )
+        self.state.was_moving_right = (
+            are_none_pressed and self.keys_pressed["LAST"] == arcade.key.RIGHT
+        )
+
+        self.move_state = self.MOVE_STATE_DICT[int(is_moving_right) - int(is_moving_left)]
+
+    def change_texture_and_hitbox(self, texture_name: str, idx=None, change_hitbox=False):
+        """Doc."""
+
+        if idx is not None:
+            self.texture = getattr(self.loaded_textures, texture_name)[idx][
+                self.state.is_facing_left
+            ]
+        else:
+            self.texture = getattr(self.loaded_textures, texture_name)[self.state.is_facing_left]
+
+        if change_hitbox:
+            self.hit_box = getattr(self.hitboxes, texture_name)
+        else:  # use default hitbox
+            self.hit_box = self.init_hitbox
+
     def update_animation(self, delta_time: float, jumps_since_ground: int):
+        """Doc."""
 
         self.time_accumulator += delta_time
 
         # stop spinning
         self.change_angle = 0
 
-        # Figure out if we need to flip face left or right
-        if self.acceleration < 0:
-            self.face_direction = game.FACE_DIRECTION.LEFT
-        elif self.acceleration > 0:
-            self.face_direction = game.FACE_DIRECTION.RIGHT
-
         # Jumping/Stalling/Falling animation
-        if jumps_since_ground >= 1 or self.change_y < 0 and not self.is_pouncing:
+        if (jumps_since_ground >= 1 or self.change_y < 0) and abs(self.change_x) <= self.speeds.RUN:
             if 5 < self.change_y:
-                self.texture = self.textures_types.jumping[self.face_direction]
+                self.change_texture_and_hitbox("jumping", change_hitbox=True)
             elif -5 < self.change_y < 5:
-                self.texture = self.textures_types.stalling[self.face_direction]
+                self.change_texture_and_hitbox("stalling", change_hitbox=True)
             elif self.change_y < -5:
-                self.texture = self.textures_types.falling[self.face_direction]
+                self.change_texture_and_hitbox("falling")
 
             if jumps_since_ground >= 2:
                 if self.change_y > -5:
-                    if self.face_direction == game.FACE_DIRECTION.RIGHT:
-                        self.change_angle = -self.spin_speed
-                    else:
-                        self.change_angle = self.spin_speed
+                    self.change_angle = -self.face_direction * self.spin_speed
                 else:
                     self.angle = 0
 
         # pounce animation
-        elif self.is_pouncing:
-            self.texture = self.textures_types.pounceing[self.face_direction]
+        elif self.state.pounce.is_pouncing:
+            self.change_texture_and_hitbox("pouncing")
 
         # Running animation
-        elif abs(self.change_x) > self.speeds.RUN * 0.2:
+        elif abs(self.change_x) > self.speeds.SLIDE:
             self.angle = 0
             if self.time_accumulator >= self.RUNNING_ANIMATION_FACTOR / (
                 abs(self.change_x) / self.speeds.RUN
-            ) / len(self.textures_types.running):
-                self.cur_texture += 1
+            ) / len(self.loaded_textures.running):
+                self.texture_idx += 1
                 self.time_accumulator = 0
-            if self.cur_texture == len(self.textures_types.running):
-                self.cur_texture = 0
-            self.texture = self.textures_types.running[self.cur_texture][self.face_direction]
+            if self.texture_idx == len(self.loaded_textures.running):
+                self.texture_idx = 0
+            self.change_texture_and_hitbox("running", idx=self.texture_idx, change_hitbox=True)
 
         # Sliding animation
-        elif 0 < abs(self.change_x) <= self.speeds.RUN * 0.2:
-            self.texture = self.textures_types.sliding[self.face_direction]
+        elif 0 < abs(self.change_x) <= self.speeds.SLIDE:
+            self.change_texture_and_hitbox("sliding", change_hitbox=True)
 
         # Idle animation
         else:
             self.angle = 0
-            self.texture = self.textures_types.standing[self.face_direction]
+            self.change_texture_and_hitbox("standing")
 
-    def update_velocity(self, keys_pressed, last_pressed_key, is_on_ground: bool):
+    def update_velocity(self):
         """Doc."""
+        # TODO: attempt to seperate directions from magnitudes? (1D vector) - could make code clearer
+        # TODO: fix pouncing with new 'state' paradigm
 
-        is_only_left_pressed = keys_pressed[arcade.key.LEFT] and not keys_pressed[arcade.key.RIGHT]
-        is_only_right_pressed = keys_pressed[arcade.key.RIGHT] and not keys_pressed[arcade.key.LEFT]
-        are_both_pressed = keys_pressed[arcade.key.RIGHT] and keys_pressed[arcade.key.LEFT]
-        is_changing_to_left = are_both_pressed and last_pressed_key == arcade.key.LEFT
-        is_changing_to_right = are_both_pressed and last_pressed_key == arcade.key.RIGHT
-        is_moving_left = is_only_left_pressed or is_changing_to_left
-        is_moving_right = is_only_right_pressed or is_changing_to_right
+        if self.state.pounce.finishing_pounce:
+            #            self.change_x = self.speeds.SLIDE
+            if self.move_state == "LEFT" or self.state.was_moving_left:
+                self.change_x = -self.speeds.SLIDE
+            if self.move_state == "RIGHT" or self.state.was_moving_right:
+                self.change_x = self.speeds.SLIDE
 
-        is_prepared_to_pounce = (
-            keys_pressed[arcade.key.DOWN] and is_on_ground and abs(self.change_x) == self.speeds.RUN
-        )
-        is_pouncing_left = is_prepared_to_pounce and is_only_left_pressed
-        is_pouncing_right = is_prepared_to_pounce and is_only_right_pressed
-        is_pouncing = is_pouncing_left or is_pouncing_right
+        if self.state.pounce.recovery_timer > 0:
+            self.acceleration_magnitude = game.PLAYER_ACCELERATION_MAGNITUDE / 5
+        else:
+            self.acceleration_magnitude = game.PLAYER_ACCELERATION_MAGNITUDE
 
-        if is_pouncing and not self.is_pouncing:
-            self.is_pouncing = True
-            keys_pressed[arcade.key.DOWN] = False
-            self.pounce_start = self.center_x
-            self.is_pouncing_left = is_pouncing_left
-            self.is_pouncing_right = is_pouncing_right
-            self.change_y = 10.0
-
-        is_close_to_edges = (
-            abs(self.center_x - self.map_width) < self.width / 2 or self.center_x < self.width / 2
-        )
-        should_keep_pouncing = (
-            self.pounce_start is not None
-            and abs(self.center_x - self.pounce_start) < self.width * 3.5
-            and not is_close_to_edges
-        )
-        if should_keep_pouncing:
-            if self.is_pouncing_left:
-                self.change_x = -self.speeds.POUNCE
-            elif self.is_pouncing_right:
-                self.change_x = self.speeds.POUNCE
-        elif self.is_pouncing:
-            self.is_pouncing = False
-            self.change_x = 0
-            self.pounce_start = None
-
-        elif not self.is_pouncing:
-            if is_moving_left:
+        if not self.state.pounce.is_pouncing:
+            if self.move_state == "LEFT":
                 self.acceleration = -self.acceleration_magnitude
-            elif is_moving_right:
+            elif self.move_state == "RIGHT":
                 self.acceleration = self.acceleration_magnitude
             else:
                 self.acceleration = 0
 
             self.change_x += self.acceleration
-            if self.change_x > self.speeds.RUN:
-                self.change_x = self.speeds.RUN
-            elif self.change_x < -self.speeds.RUN:
-                self.change_x = -self.speeds.RUN
 
-    def update_jump_velocity(self, keys_pressed) -> bool:
+            if abs(self.change_x) > self.max_run_speed:
+                if self.move_state == "RIGHT":
+                    self.change_x = self.max_run_speed
+                elif self.move_state == "LEFT":
+                    self.change_x = -self.max_run_speed
+
+            # stopping jump by letting go of key
+            if (
+                self.state.jump.is_jumping
+                and not self.state.jump.is_falling
+                and not self.keys_pressed[arcade.key.SPACE]
+            ):
+                self.change_y *= self.JUMP_STOP_RATE
+
+    def jump(self):
         """Doc."""
 
-        has_jumped = False
+        # jumping is disabled while pouncing
+        if self.state.pounce.is_pouncing:
+            self.keys_pressed[arcade.key.SPACE] = False
+        else:
+            self.change_y += self.speeds.JUMP
 
-        if self.is_pouncing:
-            keys_pressed[arcade.key.SPACE] = False
-        elif keys_pressed[arcade.key.SPACE]:
-            self.change_y = self.speeds.JUMP
-            keys_pressed[arcade.key.SPACE] = False
-            has_jumped = True
-        elif self.change_y > 0:
-            self.change_y *= 0.5
+    def pounce(self):
+        """Doc."""
 
-        return has_jumped
+        self.state.pounce.is_pouncing = True
+        if self.move_state == "LEFT":
+            self.change_x = -self.speeds.POUNCE
+        elif self.move_state == "RIGHT":
+            self.change_x = self.speeds.POUNCE
+        self.change_y = 6
+
+    def apply_friction(self):
+
+        if self.move_state == "STOP" and not self.state.is_in_air:
+            self.change_x *= game.FRICTION
+            if abs(self.change_x) < 1:
+                self.change_x = 0
 
 
 class GameWindow(arcade.Window):
@@ -347,7 +457,7 @@ class GameWindow(arcade.Window):
             width=game.SCREEN_PROPS.width,
             height=game.SCREEN_PROPS.height,
             title=game.SCREEN_TITLE,
-            fullscreen=True,
+            fullscreen=False,
         )
         self.center_window()
         self.show_view(TitleView())
@@ -363,6 +473,308 @@ class GameWindow(arcade.Window):
             # constants. This does NOT respect aspect ratio. You'd need to
             # do a bit of math for that.
             self.set_viewport(0, game.SCREEN_PROPS.width, 0, game.SCREEN_PROPS.height)
+
+
+class PlatformerView(arcade.View):
+    """Doc."""
+
+    def __init__(self) -> None:
+        super().__init__()
+
+        # These lists will hold different sets of sprites
+        self.popsicles: arcade.SpriteList = None
+        self.ice_cream_truck: BasicSprite = None
+
+        # One sprite for the player, no more is needed
+        self.player: BasicSprite = None
+
+        # We need a physics engine as well
+        self.physics_engine: arcade.PhysicsEnginePlatformer = None
+
+        # Someplace to keep score
+        self.score = 0
+
+        # Which level are we on?
+        self.level = 1
+
+        # Load up our sounds here
+        self.coin_sound = arcade.load_sound(str(ASSETS_PATH / "sounds" / "coin.wav"))
+        self.jump_sound = arcade.load_sound(str(ASSETS_PATH / "sounds" / "jump.wav"))
+        self.victory_sound = arcade.load_sound(str(ASSETS_PATH / "sounds" / "victory.wav"))
+
+        # track pressed movement keys
+        self.keys_pressed = {
+            arcade.key.LEFT: False,
+            arcade.key.RIGHT: False,
+            arcade.key.DOWN: False,
+            arcade.key.SPACE: False,
+            "LAST": None,
+        }
+
+        # Track the bottom left corner of the current viewport
+        self.view_left = 0
+        self.view_bottom = 0
+
+        # Flag for entering view mode - allows super-user to skim around
+        self.view_mode = False
+
+    def setup(self) -> None:
+        """Sets up the game for the current level"""
+
+        # Get the current map based on the level
+        map_name = f"Ice_cream_truck_level_{self.level:02}.json"
+        map_path = ASSETS_PATH / map_name
+
+        # Load the current map
+        map = arcade.tilemap.TileMap(map_path, scaling=game.MAP_SCALING)
+
+        # What are the names of the layers?
+        layer_names = ["ground", "background", "background objects"]
+        self.map_sprite_lists = {
+            layer_name: map.sprite_lists[layer_name] for layer_name in layer_names
+        }
+
+        # Set the background color
+        background_color = arcade.color.FRESH_AIR
+        if map.background_color:
+            background_color = map.background_color
+        arcade.set_background_color(background_color)
+
+        # Find the edge of the map to control viewport scrolling
+        self.map_width = (map.width - 1) * map.tile_width * game.MAP_SCALING
+
+        # Create the Ice Cream Man and Truck
+        self.ice_cream_truck = IceCreamTruck(
+            game.TRUCK_START_POS, 0.01, scale=game.ICE_CREAM_TRUCK_SCALING
+        )
+
+        # Create the player sprite, if they're not already setup
+        self.player = Player(
+            game.PLAYER_START_POS,
+            game.PLAYER_MOVE_SPEED,
+            game.PLAYER_ACCELERATION_MAGNITUDE,
+            map_width=self.map_width,
+            keys_pressed=self.keys_pressed,
+            scale=game.CHARACTER_SCALING,
+        )
+
+        # Setup the popsicle sprite list
+        self.popsicles = arcade.SpriteList()
+
+        # Reset the viewport
+        self.view_left = 0
+        self.view_bottom = 0
+
+        # Load the physics engine for this map
+        self.physics_engine = arcade.PhysicsEnginePlatformer(
+            player_sprite=self.player,
+            platforms=self.map_sprite_lists["ground"],
+            gravity_constant=game.GRAVITY,
+        )
+
+        # multi-jumps
+        self.physics_engine.enable_multi_jump(game.N_JUMPS)
+
+    def on_key_press(self, key, modifiers):
+        """Called whenever a key is pressed."""
+
+        # Check for player left/right movement
+        if key in (arcade.key.LEFT, arcade.key.RIGHT):
+            self.keys_pressed[key] = True
+            self.keys_pressed["LAST"] = key
+            self.player.update_state(
+                self.physics_engine.can_jump(), self.physics_engine.jumps_since_ground
+            )
+
+        # Check for pounce
+        if key == arcade.key.DOWN:
+            self.keys_pressed[key] = True
+            self.player.update_state(
+                self.physics_engine.can_jump(), self.physics_engine.jumps_since_ground
+            )
+            if self.player.state.pounce.can_pounce:
+                # exaust all jumps
+                for i in range(game.N_JUMPS):
+                    self.physics_engine.increment_jump_counter()
+                self.player.pounce()
+
+        # Check if we can jump
+        elif key == arcade.key.SPACE:
+            self.keys_pressed[key] = True
+            self.player.update_state(
+                self.physics_engine.can_jump(), self.physics_engine.jumps_since_ground
+            )
+            if self.player.state.jump.can_jump:
+                self.player.jump()
+                self.physics_engine.increment_jump_counter()
+                # Play the jump sound
+                arcade.play_sound(self.jump_sound)
+
+        # Did the user want to pause?
+        elif key == arcade.key.ESCAPE:
+            # Pass the current view to preserve this view's state
+            self.window.show_view(PauseView(self))
+
+        # Shortcut to end the game
+        elif key == arcade.key.Q:
+            # Show the game over screen
+            self.window.show_view(GameOverView(self))
+
+    def on_key_release(self, key, modifiers):
+        """Called when the user releases a key."""
+
+        if key in self.keys_pressed.keys():
+            self.keys_pressed[key] = False
+            self.player.update_velocity()
+
+    def on_update(self, delta_time: float) -> None:
+        """Updates the position of all screen objects
+
+        Arguments:
+            delta_time -- How much time since the last call
+        """
+
+        # Update Popsicles
+        with suppress(AttributeError):
+            # AttributeError - no popsicles present
+            self.popsicles.update_animation(delta_time)
+            for popsicle in self.popsicles:
+                popsicle.move()
+                # Check if popsicles flew off-screen
+                popsicle.restrict_position(self.map_width, should_kill=True)
+                # Check if popsicle hit ground
+                ground_hit = arcade.check_for_collision_with_list(
+                    sprite=popsicle, sprite_list=self.map_sprite_lists["ground"]
+                )
+                if ground_hit:
+                    popsicle.bounce()
+                    # melt popsicle
+                    popsicle.melt(delta_time)
+
+        # Update player movement based on the physics engine
+        self.physics_engine.update()
+        self.player.update_state(
+            self.physics_engine.can_jump(), self.physics_engine.jumps_since_ground
+        )
+        self.player.update_velocity()
+        self.player.apply_friction()
+        self.player.restrict_position(self.map_width)
+
+        # Throw Popsicle
+        if (new_popsicle := self.ice_cream_truck.throw_popsicle()) is not None:
+            self.popsicles.append(new_popsicle)
+
+        # Update the player animation
+        self.player.update_animation(delta_time, self.physics_engine.jumps_since_ground)
+
+        # Update the animations for our map objects as well
+        self.map_sprite_lists["background"].update_animation(delta_time)
+
+        with suppress(TypeError):
+            # Check if we've picked up a popsicle
+            popsicles_hit = arcade.check_for_collision_with_list(
+                sprite=self.player, sprite_list=self.popsicles
+            )
+
+            for popsicle in popsicles_hit:
+                # Add the coin score to our score
+                self.score += popsicle.point_value
+                # Play the coin sound
+                arcade.play_sound(self.coin_sound)
+                # Remove the popsicle
+                popsicle.remove_from_sprite_lists()
+
+        #        # Has Roz collided with an enemy?
+        #        enemies_hit = arcade.check_for_collision_with_list(
+        #            sprite=self.player, sprite_list=self.enemies
+        #        )
+        #
+        #        if enemies_hit:
+        #            game_over = GameOverView(self)
+        #            self.window.show_view(game_over)
+
+        # Set the viewport, scrolling if necessary
+        self.scroll_viewport()
+
+    def scroll_viewport(self) -> None:
+        """Scrolls the viewport when the player gets close to the edges"""
+        # Scroll left
+        # Find the current left boundary
+        left_boundary = self.view_left + game.LEFT_VIEWPORT_MARGIN
+
+        # Are we to the left of this boundary? Then we should scroll left
+        if self.player.left < left_boundary:
+            self.view_left -= left_boundary - self.player.left
+            # But don't scroll past the left edge of the map
+            if self.view_left < 0:
+                self.view_left = 0
+
+        # Scroll right
+        # Find the current right boundary
+        right_boundary = self.view_left + game.SCREEN_PROPS.width - game.RIGHT_VIEWPORT_MARGIN
+
+        # Are we right of this boundary? Then we should scroll right
+        if self.player.right > right_boundary:
+            self.view_left += self.player.right - right_boundary
+            # Don't scroll past the right edge of the map
+            if self.view_left > self.map_width - game.SCREEN_PROPS.width:
+                self.view_left = self.map_width - game.SCREEN_PROPS.width
+
+        # Scroll up
+        top_boundary = self.view_bottom + game.SCREEN_PROPS.height - game.TOP_VIEWPORT_MARGIN
+        if self.player.top > top_boundary:
+            self.view_bottom += self.player.top - top_boundary
+
+        # Scroll down
+        bottom_boundary = self.view_bottom + game.BOTTOM_VIEWPORT_MARGIN
+        if self.player.bottom < bottom_boundary:
+            self.view_bottom -= bottom_boundary - self.player.bottom
+
+        # Only scroll to integers. Otherwise we end up with pixels that
+        # don't line up on the screen
+        self.view_bottom = int(self.view_bottom)
+        self.view_left = int(self.view_left)
+
+        # Do the scrolling
+        arcade.set_viewport(
+            left=self.view_left,
+            right=game.SCREEN_PROPS.width + self.view_left,
+            bottom=self.view_bottom,
+            top=game.SCREEN_PROPS.height + self.view_bottom,
+        )
+
+    def on_draw(self) -> None:
+        arcade.start_render()
+
+        # Draw all the sprites
+        self.map_sprite_lists["background"].draw()
+        self.map_sprite_lists["background objects"].draw()
+        self.map_sprite_lists["ground"].draw()
+        #        self.enemies.draw()
+
+        self.ice_cream_truck.draw()
+        self.popsicles.draw()
+        self.player.draw()
+
+        # Draw the score in the lower left
+        score_text = f"Score: {self.score}"
+
+        # First a black background for a shadow effect
+        arcade.draw_text(
+            score_text,
+            start_x=10 + self.view_left,
+            start_y=10 + self.view_bottom,
+            color=arcade.csscolor.BLACK,
+            font_size=40,
+        )
+        # Now in white slightly shifted
+        arcade.draw_text(
+            score_text,
+            start_x=15 + self.view_left,
+            start_y=15 + self.view_bottom,
+            color=arcade.csscolor.WHITE,
+            font_size=40,
+        )
 
 
 class TitleView(arcade.View):
@@ -646,305 +1058,6 @@ class GameOverView(arcade.View):
 
         elif key == arcade.key.ESCAPE:
             self.window.close()
-
-
-class PlatformerView(arcade.View):
-    def __init__(self) -> None:
-        super().__init__()
-
-        # These lists will hold different sets of sprites
-        self.popsicles: arcade.SpriteList = None
-        self.ice_cream_truck: BasicSprite = None
-
-        # One sprite for the player, no more is needed
-        self.player: BasicSprite = None
-
-        # We need a physics engine as well
-        self.physics_engine: arcade.PhysicsEnginePlatformer = None
-
-        # Someplace to keep score
-        self.score = 0
-
-        # Which level are we on?
-        self.level = 1
-
-        # Load up our sounds here
-        self.coin_sound = arcade.load_sound(str(ASSETS_PATH / "sounds" / "coin.wav"))
-        self.jump_sound = arcade.load_sound(str(ASSETS_PATH / "sounds" / "jump.wav"))
-        self.victory_sound = arcade.load_sound(str(ASSETS_PATH / "sounds" / "victory.wav"))
-
-        # track pressed movement keys
-        self.keys_pressed = {
-            arcade.key.LEFT: False,
-            arcade.key.RIGHT: False,
-            arcade.key.DOWN: False,
-            arcade.key.SPACE: False,
-        }
-
-        # Track the bottom left corner of the current viewport
-        self.view_left = 0
-        self.view_bottom = 0
-
-        # Flag for entering view mode - allows super-user to skim around
-        self.view_mode = False
-
-        self.last_pressed_key = None
-
-    def setup(self) -> None:
-        """Sets up the game for the current level"""
-
-        # Get the current map based on the level
-        map_name = f"Ice_cream_truck_level_{self.level:02}.json"
-        map_path = ASSETS_PATH / map_name
-
-        # Load the current map
-        map = arcade.tilemap.TileMap(map_path, scaling=game.MAP_SCALING)
-
-        # What are the names of the layers?
-        layer_names = ["ground", "background", "background objects"]
-        self.map_sprite_lists = {
-            layer_name: map.sprite_lists[layer_name] for layer_name in layer_names
-        }
-
-        # Set the background color
-        background_color = arcade.color.FRESH_AIR
-        if map.background_color:
-            background_color = map.background_color
-        arcade.set_background_color(background_color)
-
-        # Find the edge of the map to control viewport scrolling
-        self.map_width = (map.width - 1) * map.tile_width * game.MAP_SCALING
-
-        # Create the Ice Cream Man and Truck
-        self.ice_cream_truck = IceCreamTruck(
-            game.TRUCK_START_POS, 0.01, scale=game.ICE_CREAM_TRUCK_SCALING
-        )
-
-        # Create the player sprite, if they're not already setup
-        self.player = Player(
-            game.PLAYER_START_POS,
-            game.PLAYER_MOVE_SPEED,
-            game.PLAYER_ACCELERATION_MAGNITUDE,
-            self.map_width,
-            scale=game.CHARACTER_SCALING,
-        )
-
-        # Setup the popsicle sprite list
-        self.popsicles = arcade.SpriteList()
-
-        # Reset the viewport
-        self.view_left = 0
-        self.view_bottom = 0
-
-        # Load the physics engine for this map
-        self.physics_engine = arcade.PhysicsEnginePlatformer(
-            player_sprite=self.player,
-            platforms=self.map_sprite_lists["ground"],
-            gravity_constant=game.GRAVITY,
-        )
-
-        # multi-jumps
-        self.physics_engine.enable_multi_jump(2)
-
-    def on_key_press(self, key, modifiers):
-        """Called whenever a key is pressed."""
-
-        # Check for player left/right movement
-        if key in (arcade.key.LEFT, arcade.key.RIGHT):
-            self.keys_pressed[key] = True
-            self.last_pressed_key = key
-
-        # Check for pounce
-        if key == arcade.key.DOWN:
-            self.keys_pressed[key] = True
-
-        # Check if we can jump
-        elif key == arcade.key.SPACE:
-            if self.physics_engine.can_jump():
-                self.keys_pressed[key] = True
-                has_jumped = self.player.update_jump_velocity(self.keys_pressed)
-                if has_jumped:
-                    self.physics_engine.increment_jump_counter()
-                    self.is_on_ground = False
-                    # Play the jump sound
-                    arcade.play_sound(self.jump_sound)
-
-        # Did the user want to pause?
-        elif key == arcade.key.ESCAPE:
-            # Pass the current view to preserve this view's state
-            pause = PauseView(self)
-            self.window.show_view(pause)
-
-        # Shortcut to end the game
-        elif key == arcade.key.Q:
-            # Show the game over screen
-            gameover = GameOverView(self)
-            self.window.show_view(gameover)
-
-    def on_key_release(self, key, modifiers):
-        """Called when the user releases a key."""
-
-        if key in self.keys_pressed.keys():
-            self.keys_pressed[key] = False
-            self.player.update_velocity(self.keys_pressed, self.last_pressed_key, self.is_on_ground)
-            self.player.update_jump_velocity(self.keys_pressed)
-
-    def on_update(self, delta_time: float) -> None:
-        """Updates the position of all screen objects
-
-        Arguments:
-            delta_time -- How much time since the last call
-        """
-
-        # Update the animations for our map objects as well
-        self.map_sprite_lists["background"].update_animation(delta_time)
-
-        # Are there popsicles? Update them as well
-        with suppress(AttributeError):
-            # AttributeError - no popsicles present
-            self.popsicles.update_animation(delta_time)
-            for popsicle in self.popsicles:
-                popsicle.move()
-                # Check if popsicles flew off-screen
-                if not 0 < popsicle.center_x < self.map_width:
-                    popsicle.kill()
-                # Check if popsicle hit ground
-                ground_hit = arcade.check_for_collision_with_list(
-                    sprite=popsicle, sprite_list=self.map_sprite_lists["ground"]
-                )
-                if ground_hit:
-                    popsicle.bounce()
-                    # melt popsicle
-                    popsicle.melt(delta_time)
-
-        # Update player movement based on the physics engine
-        self.physics_engine.update()
-        self.physics_engine.can_jump()
-        self.is_on_ground = self.physics_engine.jumps_since_ground == 0
-        self.player.update_velocity(self.keys_pressed, self.last_pressed_key, self.is_on_ground)
-        #        self.last_pressed_key = None
-        self.player.apply_friction(self.keys_pressed)
-
-        # Throw Popsicle
-        if (new_popsicle := self.ice_cream_truck.throw_popsicle()) is not None:
-            self.popsicles.append(new_popsicle)
-
-        # Update the player animation
-        self.player.update_animation(delta_time, self.physics_engine.jumps_since_ground)
-
-        # Restrict user movement so they can't walk off screen
-        if self.player.left < 0:
-            self.player.left = 0
-        if self.player.right >= self.map_width:
-            self.player.right = self.map_width
-        if self.player.bottom < 0:
-            self.player.bottom = 0
-
-        with suppress(TypeError):
-            # Check if we've picked up a popsicle
-            popsicles_hit = arcade.check_for_collision_with_list(
-                sprite=self.player, sprite_list=self.popsicles
-            )
-
-            for popsicle in popsicles_hit:
-                # Add the coin score to our score
-                self.score += popsicle.point_value
-                # Play the coin sound
-                arcade.play_sound(self.coin_sound)
-                # Remove the popsicle
-                popsicle.remove_from_sprite_lists()
-
-        #        # Has Roz collided with an enemy?
-        #        enemies_hit = arcade.check_for_collision_with_list(
-        #            sprite=self.player, sprite_list=self.enemies
-        #        )
-        #
-        #        if enemies_hit:
-        #            game_over = GameOverView(self)
-        #            self.window.show_view(game_over)
-
-        # Set the viewport, scrolling if necessary
-        self.scroll_viewport()
-
-    def scroll_viewport(self) -> None:
-        """Scrolls the viewport when the player gets close to the edges"""
-        # Scroll left
-        # Find the current left boundary
-        left_boundary = self.view_left + game.LEFT_VIEWPORT_MARGIN
-
-        # Are we to the left of this boundary? Then we should scroll left
-        if self.player.left < left_boundary:
-            self.view_left -= left_boundary - self.player.left
-            # But don't scroll past the left edge of the map
-            if self.view_left < 0:
-                self.view_left = 0
-
-        # Scroll right
-        # Find the current right boundary
-        right_boundary = self.view_left + game.SCREEN_PROPS.width - game.RIGHT_VIEWPORT_MARGIN
-
-        # Are we right of this boundary? Then we should scroll right
-        if self.player.right > right_boundary:
-            self.view_left += self.player.right - right_boundary
-            # Don't scroll past the right edge of the map
-            if self.view_left > self.map_width - game.SCREEN_PROPS.width:
-                self.view_left = self.map_width - game.SCREEN_PROPS.width
-
-        # Scroll up
-        top_boundary = self.view_bottom + game.SCREEN_PROPS.height - game.TOP_VIEWPORT_MARGIN
-        if self.player.top > top_boundary:
-            self.view_bottom += self.player.top - top_boundary
-
-        # Scroll down
-        bottom_boundary = self.view_bottom + game.BOTTOM_VIEWPORT_MARGIN
-        if self.player.bottom < bottom_boundary:
-            self.view_bottom -= bottom_boundary - self.player.bottom
-
-        # Only scroll to integers. Otherwise we end up with pixels that
-        # don't line up on the screen
-        self.view_bottom = int(self.view_bottom)
-        self.view_left = int(self.view_left)
-
-        # Do the scrolling
-        arcade.set_viewport(
-            left=self.view_left,
-            right=game.SCREEN_PROPS.width + self.view_left,
-            bottom=self.view_bottom,
-            top=game.SCREEN_PROPS.height + self.view_bottom,
-        )
-
-    def on_draw(self) -> None:
-        arcade.start_render()
-
-        # Draw all the sprites
-        self.map_sprite_lists["background"].draw()
-        self.map_sprite_lists["background objects"].draw()
-        self.map_sprite_lists["ground"].draw()
-        #        self.enemies.draw()
-
-        self.ice_cream_truck.draw()
-        self.popsicles.draw()
-        self.player.draw()
-
-        # Draw the score in the lower left
-        score_text = f"Score: {self.score}"
-
-        # First a black background for a shadow effect
-        arcade.draw_text(
-            score_text,
-            start_x=10 + self.view_left,
-            start_y=10 + self.view_bottom,
-            color=arcade.csscolor.BLACK,
-            font_size=40,
-        )
-        # Now in white slightly shifted
-        arcade.draw_text(
-            score_text,
-            start_x=15 + self.view_left,
-            start_y=15 + self.view_bottom,
-            color=arcade.csscolor.WHITE,
-            font_size=40,
-        )
 
 
 if __name__ == "__main__":
