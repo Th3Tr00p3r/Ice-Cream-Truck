@@ -6,26 +6,38 @@ from types import SimpleNamespace
 
 import arcade
 import game_constants as game
-from helper import Vector
+import PIL
+from helper import Vector, tint_greyscale_pixels
 
 # Assets path
 ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
 
 
 class BasicSprite(arcade.Sprite):
+
+    texture: arcade.Texture
+
     def __init__(self, init_position: Vector, texture_path: Path, **kwargs):
         init_x, init_y = init_position
         super().__init__(filename=texture_path, center_x=init_x, center_y=init_y, **kwargs)
 
-    def load_texture_pair(self, filename):
+    def load_texture_pair(self, filename, color_tint: str = None):
         """
         Load a texture pair, with the second being a mirror image.
+        Optionally, tint the greyscale pixels of the texture.
         """
+
+        right_texture = arcade.load_texture(filename)
+        left_texture = arcade.load_texture(filename, flipped_horizontally=True)
+
+        if color_tint is not None:
+            right_texture.image = tint_greyscale_pixels(right_texture.image, color_tint)
+            left_texture.image = tint_greyscale_pixels(left_texture.image, color_tint)
 
         TexturePair = namedtuple("TexturePair", "RIGHT LEFT")
         return TexturePair(
-            RIGHT=arcade.load_texture(filename),
-            LEFT=arcade.load_texture(filename, flipped_horizontally=True),
+            RIGHT=right_texture,
+            LEFT=left_texture,
         )
 
     def restrict_position(self, map_width, should_kill=False):
@@ -41,6 +53,11 @@ class BasicSprite(arcade.Sprite):
                 self.kill()
         if self.bottom < 0:
             self.bottom = 0
+
+    def tint_texture(self, texture: PIL.Image, color: str, **kwargs):
+        """Doc."""
+
+        self.texture = tint_greyscale_pixels(self.texture, color, **kwargs)
 
 
 class Popsicle(BasicSprite):
@@ -169,6 +186,7 @@ class Player(BasicSprite):
         init_position: Vector,
         speeds: SimpleNamespace,
         acceleration_magnitude: float,
+        color: str,
         map_width,
         keys_pressed,
         **kwargs,
@@ -212,16 +230,16 @@ class Player(BasicSprite):
 
         # Load textures
         self.loaded_textures = SimpleNamespace(
-            standing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStanding.png"),
+            standing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStanding.png", color),
             running=[
-                self.load_texture_pair(self.MAIN_TEXTURE_PATH / f"catRunning{i}.png")
+                self.load_texture_pair(self.MAIN_TEXTURE_PATH / f"catRunning{i}.png", color)
                 for i in (1, 2, 3, 4)
             ],
-            pouncing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning4.png"),
-            sliding=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning1.png"),
-            jumping=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catJumping.png"),
-            stalling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStalling.png"),
-            falling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catFalling.png"),
+            pouncing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning4.png", color),
+            sliding=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning1.png", color),
+            jumping=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catJumping.png", color),
+            stalling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStalling.png", color),
+            falling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catFalling.png", color),
         )
         self.hitboxes = SimpleNamespace(
             **{

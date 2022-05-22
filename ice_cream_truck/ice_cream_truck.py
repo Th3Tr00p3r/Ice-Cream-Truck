@@ -113,11 +113,12 @@ class PlatformerView(arcade.View):
             game.TRUCK_START_POS, 0.01, scale=game.ICE_CREAM_TRUCK_SCALING
         )
 
-        # Create the player sprite, if they're not already setup
+        # Create the player sprite
         self.player = Player(
             game.PLAYER_START_POS,
             game.PLAYER_MOVE_SPEED,
             game.PLAYER_ACCELERATION_MAGNITUDE,
+            "green",
             map_width=self.map_width,
             keys_pressed=self.keys_pressed,
             scale=game.CHARACTER_SCALING,

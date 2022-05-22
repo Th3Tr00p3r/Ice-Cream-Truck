@@ -4,6 +4,9 @@ Helper Module
 
 from dataclasses import asdict, dataclass, field
 
+import numpy as np
+import PIL
+
 
 @dataclass
 class Vector:
@@ -64,3 +67,30 @@ class ScreenProps:
 
     def as_dict(self) -> dict:
         return asdict(self)
+
+
+def tint_greyscale_pixels(
+    img: PIL.Image,
+    color: str,
+    threshold_shade_of_grey: float = 100.0,
+    threshold_deviation_from_grey: float = 35.0,
+    linear_beta: tuple = (135.0, 1.0),
+) -> PIL.Image:
+
+    rgb_color = PIL.ImageColor.getrgb(color)
+
+    img_arr = np.array(img)
+    norm_greyscale_img_arr = img_arr[:, :, :3].mean(2) / 255
+    greyscale_mask = (img_arr[:, :, :3].std(2) <= threshold_deviation_from_grey) & (
+        img_arr[:, :, :3].mean(2) <= threshold_shade_of_grey
+    )
+
+    delta, factor = linear_beta
+    for dim, color_band in enumerate(rgb_color):
+        img_arr[greyscale_mask, dim] = (
+            (norm_greyscale_img_arr[greyscale_mask] + delta) * color_band * factor
+        )
+
+    img_arr = np.clip(img_arr, 0, 255)
+
+    return PIL.Image.fromarray(img_arr.astype(np.uint8))
