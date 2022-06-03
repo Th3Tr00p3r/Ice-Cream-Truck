@@ -60,10 +60,195 @@ class BasicSprite(arcade.Sprite):
         self.texture = tint_greyscale_pixels(self.texture, color, **kwargs)
 
 
+class CompetitorCat(BasicSprite):
+    """Doc."""
+
+    MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "cat"
+    RUNNING_ANIMATION_FACTOR = 0.2
+    MAX_LIVES = 1
+    texture: arcade.texture.Texture
+
+    def __init__(
+        self,
+        init_position: Vector,
+        speeds: SimpleNamespace,
+        acceleration_magnitude: float,
+        color: str,
+        game_view: arcade.view,
+        **kwargs,
+    ):
+
+        super().__init__(init_position, self.MAIN_TEXTURE_PATH / "catStanding.png", **kwargs)
+
+        # initial lives
+        self.lives = self.MAX_LIVES
+
+        # get default/initial hitbox
+        self.init_hitbox = self.texture.hit_box_points
+
+        # initialize state
+        self.move_state = game.STOP
+        self.state = SimpleNamespace(
+            is_facing_left=int(False),
+            jump=SimpleNamespace(
+                can_jump=False,
+                is_jumping=False,
+                is_falling=False,
+            ),
+            pounce=SimpleNamespace(
+                can_pounce=False,
+                is_pouncing=False,
+                finishing_pounce=False,
+                recovery_timer=0,
+            ),
+            is_near_edge=False,
+            is_in_air=False,
+        )
+
+        # Default to face-right
+        self.face_direction = game.FACE_RIGHT
+
+        # Used for flipping between image sequences
+        self.texture_idx = 0
+
+        # Load textures
+        self.loaded_textures = SimpleNamespace(
+            standing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStanding.png", color),
+            running=[
+                self.load_texture_pair(self.MAIN_TEXTURE_PATH / f"catRunning{i}.png", color)
+                for i in (1, 2, 3, 4)
+            ],
+            pouncing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning4.png", color),
+            sliding=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning1.png", color),
+            jumping=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catJumping.png", color),
+            stalling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStalling.png", color),
+            falling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catFalling.png", color),
+        )
+        self.hitboxes = SimpleNamespace(
+            **{
+                name: (
+                    txtr[0][0].hit_box_points if isinstance(txtr, list) else txtr[0].hit_box_points
+                )
+                for name, txtr in vars(self.loaded_textures).items()
+            }
+        )
+
+        self.speeds = speeds
+        self.max_run_speed = self.speeds.RUN
+        self.acceleration_magnitude = acceleration_magnitude
+        self.acceleration = 0.0
+        self.spin_speed = 30
+
+        # for setting running animation frequency
+        self.time_accumulator = 0.0
+
+    def change_texture_and_hitbox(self, texture_name: str, idx=None, change_hitbox=False):
+        """Doc."""
+
+        if idx is not None:
+            self.texture = getattr(self.loaded_textures, texture_name)[idx][
+                self.state.is_facing_left
+            ]
+        else:
+            self.texture = getattr(self.loaded_textures, texture_name)[self.state.is_facing_left]
+
+        if change_hitbox:
+            self.hit_box = getattr(self.hitboxes, texture_name)
+        else:  # use default hitbox
+            self.hit_box = self.init_hitbox
+
+    def update_animation(self, delta_time: float, jumps_since_ground: int):
+        """Doc."""
+
+        self.time_accumulator += delta_time
+
+        # stop spinning
+        self.change_angle = 0
+
+        # Jumping/Stalling/Falling animation
+        if (jumps_since_ground >= 1 or self.change_y < 0) and abs(self.change_x) <= self.speeds.RUN:
+            if 5 < self.change_y:
+                self.change_texture_and_hitbox("jumping", change_hitbox=True)
+            elif -5 < self.change_y < 5:
+                self.change_texture_and_hitbox("stalling", change_hitbox=True)
+            elif self.change_y < -5:
+                self.change_texture_and_hitbox("falling")
+
+            if jumps_since_ground >= 2:
+                if self.change_y > -5:
+                    self.change_angle = -self.face_direction * self.spin_speed
+                else:
+                    self.angle = 0
+
+        # pounce animation
+        elif self.state.pounce.is_pouncing:
+            self.change_texture_and_hitbox("pouncing")
+
+        # Running animation
+        elif not self.move_state == game.STOP:
+            self.angle = 0
+            if self.time_accumulator >= self.RUNNING_ANIMATION_FACTOR / (
+                (
+                    abs(self.change_x)
+                    + (
+                        self.acceleration_magnitude * 20
+                        if self.acceleration * self.change_x < 0
+                        or abs(self.change_x) <= self.speeds.SLIDE
+                        else 0
+                    )
+                )
+                / self.speeds.RUN
+            ) / len(self.loaded_textures.running):
+                self.texture_idx += 1
+                self.time_accumulator = 0
+            if self.texture_idx == len(self.loaded_textures.running):
+                self.texture_idx = 0
+            self.change_texture_and_hitbox("running", idx=self.texture_idx, change_hitbox=True)
+
+        # Sliding animation
+        elif 0 < abs(self.change_x) <= self.speeds.SLIDE:
+            self.change_texture_and_hitbox("sliding", change_hitbox=True)
+
+        # Idle animation
+        else:
+            self.angle = 0
+            self.change_texture_and_hitbox("standing")
+
+    def seek(self):
+        """Fetch closest self-colored popsicle if one exists, otherwise go to ice_cream_truck"""
+
+        try:
+            closest_popsicle_disp = sorted(
+                [
+                    popsicle.center_x - self.center_x
+                    for popsicle in self.game_view.popsicles
+                    if popsicle.color == self.color
+                ],
+                key=lambda popsicle: abs(popsicle.center_x - self.center_x),
+                reverse=True,
+            )[0]
+        except IndexError:
+            # move towards ice_cream_truck
+            self.change_x += (
+                math.copysign(1, self.center_x - self.game_view.ice_cream_truck.center_x)
+                * self.acceleration_magnitude
+            )
+        else:
+            # seek closest popsicle
+            self.change_x += math.copysign(1, closest_popsicle_disp) * self.acceleration_magnitude
+
+    def apply_friction(self):
+
+        if self.move_state == game.STOP and not self.state.is_in_air:
+            self.change_x *= game.FRICTION
+            if abs(self.change_x) < 1:
+                self.change_x = 0
+
+
 class Player(BasicSprite):
     """Doc."""
 
-    MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "player"
+    MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "cat"
     RUNNING_ANIMATION_FACTOR = 0.2
     JUMP_STOP_RATE = 0.9
     MAX_LIVES = 3
