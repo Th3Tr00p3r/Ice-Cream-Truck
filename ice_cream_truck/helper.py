@@ -3,6 +3,7 @@ Helper Module
 """
 
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 
 import numpy as np
 import PIL
@@ -94,3 +95,36 @@ def tint_greyscale_pixels(
     img_arr = np.clip(img_arr, 0, 255)
 
     return PIL.Image.fromarray(img_arr.astype(np.uint8))
+
+
+def crop_resize_concat_horizontally(im_list, resample=PIL.Image.BOX):
+    # Adapted from: https://note.nkmk.me/en/python-pillow-concat-images/
+
+    cropped_img_list = [img.crop(img.getbbox()) for img in im_list]
+    min_height = min(im.height for im in cropped_img_list)
+    im_list_resize = [
+        im.resize((int(im.width * min_height / im.height), min_height), resample=resample)
+        for im in cropped_img_list
+    ]
+    total_width = sum(im.width for im in im_list_resize)
+    dst = PIL.Image.new("RGBA", (total_width, min_height))
+    pos_x = 0
+    for im in im_list_resize:
+        dst.paste(im, (pos_x, 0))
+        pos_x += im.width
+    return dst
+
+
+def get_score_image(n: int, digit_img_dir_path: Path):
+    """
+    Accepts an integer 'n' and a path to a directory containing only
+    relevent digit images (sorted - e.g. ending in the corresponding digit)
+    and returns an image of the number, made of the digit images supplied.
+    """
+
+    digit_dict = {
+        idx: PIL.Image.open(img_path)
+        for idx, img_path in enumerate(digit_img_dir_path.glob("*.png"))
+    }
+    img_list = [digit_dict[int(digit_char)] for digit_char in str(n)]
+    return crop_resize_concat_horizontally(img_list)

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import arcade
 import game_constants as game
+from helper import get_score_image
 from sprites import IceCreamTruck, Player, Popsicle
 
 # Assets path
@@ -43,6 +44,8 @@ class GameWindow(arcade.Window):
 class PlatformerView(arcade.View):
     """Doc."""
 
+    score_asstes_path = ASSETS_PATH / "images" / "score"
+
     def __init__(self) -> None:
         super().__init__()
 
@@ -58,6 +61,7 @@ class PlatformerView(arcade.View):
 
         # Someplace to keep score
         self.score = 0
+        self.last_drawn_score: int = None
 
         # Which level are we on?
         self.level = 1
@@ -323,23 +327,17 @@ class PlatformerView(arcade.View):
         self.player.draw()
 
         # Draw the score in the lower left
-        score_text = f"Score: {self.score}"
+        if self.score != self.last_drawn_score:
+            new_score_image = get_score_image(self.score, self.score_asstes_path)
+            self.score_image = arcade.Texture(str(self.score), new_score_image)
+            self.last_drawn_score = self.score
 
-        # First a black background for a shadow effect
-        arcade.draw_text(
-            score_text,
-            start_x=10 + self.view_left,
-            start_y=10 + self.view_bottom,
-            color=arcade.csscolor.BLACK,
-            font_size=40,
-        )
-        # Now in white slightly shifted
-        arcade.draw_text(
-            score_text,
-            start_x=15 + self.view_left,
-            start_y=15 + self.view_bottom,
-            color=arcade.csscolor.WHITE,
-            font_size=40,
+        arcade.draw_texture_rectangle(
+            100 + self.view_left,
+            self.view_bottom + game.SCREEN_PROPS.height - 50,
+            150,
+            75,
+            self.score_image,
         )
 
 
