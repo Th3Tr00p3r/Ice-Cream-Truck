@@ -295,10 +295,7 @@ class Player(BasicSprite):
         # TODO: attempt to seperate directions from magnitudes? (1D vector) - could make code clearer
 
         if self.state.pounce.finishing_pounce:
-            if self.move_state == game.LEFT or self.state.was_moving_left:
-                self.change_x = -self.speeds.SLIDE
-            if self.move_state == game.RIGHT or self.state.was_moving_right:
-                self.change_x = self.speeds.SLIDE
+            self.change_x *= self.speeds.SLIDE / self.speeds.POUNCE
 
         if self.state.pounce.recovery_timer > 0:
             self.max_run_speed = self.speeds.RUN / 1.5
