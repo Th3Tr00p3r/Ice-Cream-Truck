@@ -3,7 +3,6 @@ Helper Module
 """
 
 from dataclasses import asdict, dataclass, field
-from pathlib import Path
 
 import numpy as np
 import PIL
@@ -113,18 +112,3 @@ def crop_resize_concat_horizontally(im_list, resample=PIL.Image.BOX):
         dst.paste(im, (pos_x, 0))
         pos_x += im.width
     return dst
-
-
-def get_score_image(n: int, digit_img_dir_path: Path):
-    """
-    Accepts an integer 'n' and a path to a directory containing only
-    relevent digit images (sorted - e.g. ending in the corresponding digit)
-    and returns an image of the number, made of the digit images supplied.
-    """
-
-    digit_dict = {
-        idx: PIL.Image.open(img_path)
-        for idx, img_path in enumerate(digit_img_dir_path.glob("*.png"))
-    }
-    img_list = [digit_dict[int(digit_char)] for digit_char in str(n)]
-    return crop_resize_concat_horizontally(img_list)

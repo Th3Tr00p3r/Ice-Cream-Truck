@@ -8,7 +8,8 @@ from pathlib import Path
 
 import arcade
 import game_constants as game
-from helper import get_score_image
+import PIL
+from helper import crop_resize_concat_horizontally
 from sprites import IceCreamTruck, Player, Popsicle
 
 # Assets path
@@ -44,8 +45,6 @@ class GameWindow(arcade.Window):
 class PlatformerView(arcade.View):
     """Doc."""
 
-    score_asstes_path = ASSETS_PATH / "images" / "score"
-
     def __init__(self) -> None:
         super().__init__()
 
@@ -62,6 +61,17 @@ class PlatformerView(arcade.View):
         # Someplace to keep score
         self.score = 0
         self.last_drawn_score: int = None
+        self.digit_dict = {
+            idx: PIL.Image.open(img_path)
+            for idx, img_path in enumerate((ASSETS_PATH / "images" / "HUD" / "score").glob("*.png"))
+        }
+
+        # lives
+        self.empty_heart_image = PIL.Image.open(
+            ASSETS_PATH / "images" / "HUD" / "hudHeart_empty.png"
+        )
+        self.full_heart_image = PIL.Image.open(ASSETS_PATH / "images" / "HUD" / "hudHeart_full.png")
+        self.last_drawn_lives: int = None
 
         # Which level are we on?
         self.level = 1
@@ -326,9 +336,9 @@ class PlatformerView(arcade.View):
         self.popsicles.draw()
         self.player.draw()
 
-        # Draw the score in the lower left
+        # Draw the score in the upper left
         if self.score != self.last_drawn_score:
-            new_score_image = get_score_image(self.score, self.score_asstes_path)
+            new_score_image = self.get_score_image(self.score)
             self.score_image = arcade.Texture(str(self.score), new_score_image)
             self.last_drawn_score = self.score
 
@@ -338,6 +348,38 @@ class PlatformerView(arcade.View):
             150,
             75,
             self.score_image,
+        )
+
+        # Draw lives HUD in the upper right
+        if self.player.lives != self.last_drawn_lives:
+            new_lives_image = self.get_lives_hud(self.player.MAX_LIVES, self.player.lives)
+            self.lives_image = arcade.Texture(str(new_lives_image), new_lives_image)
+            self.last_drawn_lives = self.player.lives
+
+        arcade.draw_texture_rectangle(
+            self.view_left + game.SCREEN_PROPS.width - 100,
+            self.view_bottom + game.SCREEN_PROPS.height - 50,
+            150,
+            50,
+            self.lives_image,
+        )
+
+    def get_score_image(self, score: int):
+        """
+        Accepts an integer 'n' and a path to a directory containing only
+        relevent digit images (sorted - e.g. ending in the corresponding digit)
+        and returns an image of the number, made of the digit images supplied.
+        """
+
+        img_list = [self.digit_dict[int(digit_char)] for digit_char in str(score)]
+        return crop_resize_concat_horizontally(img_list)
+
+    def get_lives_hud(self, n_max_lives: int, n_lives_left: int):
+        """Doc."""
+
+        n_lives_lost = n_max_lives - n_lives_left
+        return crop_resize_concat_horizontally(
+            [self.full_heart_image] * n_lives_left + [self.empty_heart_image] * n_lives_lost
         )
 
 

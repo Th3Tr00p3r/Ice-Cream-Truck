@@ -66,6 +66,7 @@ class Player(BasicSprite):
     MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "player"
     RUNNING_ANIMATION_FACTOR = 0.2
     JUMP_STOP_RATE = 0.9
+    MAX_LIVES = 3
     texture: arcade.texture.Texture
 
     def __init__(
@@ -80,6 +81,9 @@ class Player(BasicSprite):
     ):
 
         super().__init__(init_position, self.MAIN_TEXTURE_PATH / "catStanding.png", **kwargs)
+
+        # initial lives
+        self.lives = self.MAX_LIVES
 
         # get default/initial hitbox
         self.init_hitbox = self.texture.hit_box_points
