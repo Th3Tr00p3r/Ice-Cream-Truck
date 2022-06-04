@@ -5,13 +5,13 @@ Ice Cream Truck Game
 
 from contextlib import suppress
 from pathlib import Path
-from random import choice, random
+from random import choice, random, uniform
 from types import SimpleNamespace
 
 import arcade
 import game_constants as game
 import PIL
-from helper import Vector, crop_resize_concat_horizontally
+from helper import crop_resize_concat_horizontally
 from sprites import CompetitorCat, IceCreamTruck, Player, Popsicle
 
 # Assets path
@@ -59,8 +59,7 @@ class PlatformerView(arcade.View):
 
         # Enemies
         self.n_allowed_cats = 1
-        self.n_cats = 0
-        self.new_cat_prob_frame = 0.01
+        self.new_cat_prob_frame = 0.001
 
         # We need a physics engine as well
         self.physics_engine: arcade.PhysicsEnginePlatformer = None
@@ -80,13 +79,13 @@ class PlatformerView(arcade.View):
         self.full_heart_image = PIL.Image.open(ASSETS_PATH / "images" / "HUD" / "hudHeart_full.png")
         self.last_drawn_lives: int = None
 
-        # Which level are we on?
-        self.level = 1
-
         # Load up our sounds here
         self.coin_sound = arcade.load_sound(str(ASSETS_PATH / "sounds" / "coin.wav"))
         self.jump_sound = arcade.load_sound(str(ASSETS_PATH / "sounds" / "jump.wav"))
         self.victory_sound = arcade.load_sound(str(ASSETS_PATH / "sounds" / "victory.wav"))
+
+        # Which level are we on?
+        self.level = 1
 
         # track pressed movement keys
         self.keys_pressed = {
@@ -131,7 +130,7 @@ class PlatformerView(arcade.View):
 
         # Create the Ice Cream Man and Truck
         self.ice_cream_truck = IceCreamTruck(
-            game.TRUCK_START_POS, 0.01, scale=game.ICE_CREAM_TRUCK_SCALING
+            game.TRUCK_START_POS, 0.03, scale=game.ICE_CREAM_TRUCK_SCALING
         )
 
         # Create the player sprite
@@ -139,7 +138,7 @@ class PlatformerView(arcade.View):
             game.PLAYER_START_POS,
             game.PLAYER_MOVE_SPEED,
             game.PLAYER_ACCELERATION_MAGNITUDE,
-            "red",
+            "lime",
             map_width=self.map_width,
             keys_pressed=self.keys_pressed,
             scale=game.CHARACTER_SCALING,
@@ -150,6 +149,7 @@ class PlatformerView(arcade.View):
 
         # Initiate the competitor cats sprite list
         self.cats = arcade.SpriteList()
+        self.n_cats = 0
 
         # Reset the viewport
         self.view_left = 0
@@ -164,6 +164,12 @@ class PlatformerView(arcade.View):
 
         # multi-jumps
         self.physics_engine.enable_multi_jump(game.N_JUMPS)
+
+        # reset score
+        self.score = 0
+
+        # timer
+        self.game_timer = 0.0
 
     def on_key_press(self, key, modifiers):
         """Called whenever a key is pressed."""
@@ -224,6 +230,15 @@ class PlatformerView(arcade.View):
             delta_time -- How much time since the last call
         """
 
+        # timer
+        self.game_timer += delta_time
+        if (
+            self.game_timer >= 60
+            and self.game_timer % 60 <= delta_time * 2
+            and self.n_allowed_cats < 5
+        ):
+            self.n_allowed_cats += 1
+
         # Update Popsicles
         with suppress(AttributeError):
             # AttributeError - no popsicles present
@@ -253,9 +268,9 @@ class PlatformerView(arcade.View):
         # Update competitor cats
         with suppress(AttributeError):
             # AttributeError - no popsicles present
-            self.popsicles.update_animation(delta_time)
+            self.cats.update_animation(delta_time)
             for cat in self.cats:
-                cat.seek()
+                cat.seek(delta_time)
                 # Prevent cat from going off-screen
                 cat.restrict_position(self.map_width)
                 # Check if popsicle hit ground
@@ -273,13 +288,14 @@ class PlatformerView(arcade.View):
         if self.n_cats < self.n_allowed_cats and random() < self.new_cat_prob_frame:
             self.cats.append(
                 CompetitorCat(
-                    init_position=Vector(500, 500),  # TESTESTEST
+                    init_position=game.PLAYER_START_POS,  # TESTESTEST
                     speeds=SimpleNamespace(
-                        RUN=10 / 2, SLIDE=5 / 2, JUMP=20 / 2, POUNCE=35 / 2
+                        RUN=10 / 3, SLIDE=5 / 3, JUMP=20 / 3, POUNCE=35 / 3
                     ),  # pixels per frame
-                    acceleration_magnitude=0.75 / 2,
+                    acceleration_magnitude=50 / 3,
                     color_str=choice(list(game.COLORS - {self.player.color_str})),
                     game_view=self,
+                    scale=game.CHARACTER_SCALING * uniform(1, 1.5),
                 )
             )
             self.n_cats += 1
@@ -313,14 +329,16 @@ class PlatformerView(arcade.View):
                 if popsicle.color_str == cat.color_str:
                     popsicle.remove_from_sprite_lists()
 
-        #        # Has Roz collided with an enemy?
-        #        enemies_hit = arcade.check_for_collision_with_list(
-        #            sprite=self.player, sprite_list=self.enemies
-        #        )
-        #
-        #        if enemies_hit:
-        #            game_over = GameOverView(self)
-        #            self.window.show_view(game_over)
+        # Check for player collisions with other cats
+        cats_hit = arcade.check_for_collision_with_list(sprite=self.player, sprite_list=self.cats)
+        for cat in cats_hit:
+            if self.player.change_y <= -self.player.speeds.JUMP / 2:
+                cat.kill()
+                self.n_cats -= 1
+            else:
+                self.player.get_hit()
+                if not self.player.lives:
+                    self.window.show_view(GameOverView(self))
 
         # Set the viewport, scrolling if necessary
         self.scroll_viewport()

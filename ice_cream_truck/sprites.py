@@ -31,8 +31,12 @@ class BasicSprite(arcade.Sprite):
         left_texture = arcade.load_texture(filename, flipped_horizontally=True)
 
         if color_tint is not None:
-            right_texture.image = tint_greyscale_pixels(right_texture.image, color_tint)
-            left_texture.image = tint_greyscale_pixels(left_texture.image, color_tint)
+            #            right_texture.image = tint_greyscale_pixels(right_texture.image, color_tint)
+            #            left_texture.image = tint_greyscale_pixels(left_texture.image, color_tint)
+            tinted_right = tint_greyscale_pixels(right_texture.image, color_tint)
+            tinted_left = tint_greyscale_pixels(left_texture.image, color_tint)
+            right_texture = arcade.Texture(str(tinted_right), tinted_right)
+            left_texture = arcade.Texture(str(tinted_left), tinted_left)
 
         TexturePair = namedtuple("TexturePair", "RIGHT LEFT")
         return TexturePair(
@@ -64,9 +68,12 @@ class CompetitorCat(BasicSprite):
     """Doc."""
 
     MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "cat"
-    RUNNING_ANIMATION_FACTOR = 0.2
+    RUNNING_ANIMATION_FACTOR = 0.4  # TODO: twice that of player (should be determined by speed)
     MAX_LIVES = 1
     texture: arcade.texture.Texture
+    change_x: float
+    change_y: float
+    center_y: float
 
     def __init__(
         self,
@@ -105,8 +112,10 @@ class CompetitorCat(BasicSprite):
                 recovery_timer=0,
             ),
             is_near_edge=False,
-            is_in_air=False,
+            is_in_air=True,
         )
+
+        self.mode = "returning"
 
         # Default to face-right
         self.face_direction = game.FACE_RIGHT
@@ -141,10 +150,11 @@ class CompetitorCat(BasicSprite):
         self.max_run_speed = self.speeds.RUN
         self.acceleration_magnitude = acceleration_magnitude
         self.acceleration = 0.0
-        self.spin_speed = 30
+        self.delta_v = 0.0
 
         # for setting running animation frequency
         self.time_accumulator = 0.0
+        self.face_switch_timer = 0.0
 
     def change_texture_and_hitbox(self, texture_name: str, idx=None, change_hitbox=False):
         """Doc."""
@@ -161,8 +171,19 @@ class CompetitorCat(BasicSprite):
         else:  # use default hitbox
             self.hit_box = self.init_hitbox
 
-    def update_animation(self, delta_time: float, jumps_since_ground: int):
+    def update_animation(self, delta_time: float):
         """Doc."""
+
+        self.face_switch_timer += delta_time
+
+        # update state
+        if self.delta_v != 0:
+            self.move_state = int(math.copysign(1, self.delta_v))
+            if self.face_switch_timer > 0.5:
+                self.state.is_facing_left = self.move_state < 0
+                self.face_switch_timer = 0.0
+        else:
+            self.move_state = 0
 
         self.time_accumulator += delta_time
 
@@ -170,7 +191,7 @@ class CompetitorCat(BasicSprite):
         self.change_angle = 0
 
         # Jumping/Stalling/Falling animation
-        if (jumps_since_ground >= 1 or self.change_y < 0) and abs(self.change_x) <= self.speeds.RUN:
+        if self.change_y < 0 and abs(self.change_x) <= self.speeds.RUN:
             if 5 < self.change_y:
                 self.change_texture_and_hitbox("jumping", change_hitbox=True)
             elif -5 < self.change_y < 5:
@@ -178,25 +199,18 @@ class CompetitorCat(BasicSprite):
             elif self.change_y < -5:
                 self.change_texture_and_hitbox("falling")
 
-            if jumps_since_ground >= 2:
-                if self.change_y > -5:
-                    self.change_angle = -self.face_direction * self.spin_speed
-                else:
-                    self.angle = 0
-
         # pounce animation
         elif self.state.pounce.is_pouncing:
             self.change_texture_and_hitbox("pouncing")
 
         # Running animation
-        elif not self.move_state == game.STOP:
-            self.angle = 0
+        elif not self.mode == "waiting":
             if self.time_accumulator >= self.RUNNING_ANIMATION_FACTOR / (
                 (
                     abs(self.change_x)
                     + (
-                        self.acceleration_magnitude * 20
-                        if self.acceleration * self.change_x < 0
+                        self.acceleration_magnitude * delta_time * 10
+                        if self.delta_v * self.change_x < 0.0
                         or abs(self.change_x) <= self.speeds.SLIDE
                         else 0
                     )
@@ -209,17 +223,12 @@ class CompetitorCat(BasicSprite):
                 self.texture_idx = 0
             self.change_texture_and_hitbox("running", idx=self.texture_idx, change_hitbox=True)
 
-        # Sliding animation
-        elif 0 < abs(self.change_x) <= self.speeds.SLIDE:
-            self.change_texture_and_hitbox("sliding", change_hitbox=True)
-
         # Idle animation
         else:
-            self.angle = 0
             self.change_texture_and_hitbox("standing")
 
-    def seek(self):
-        """Fetch closest self-colored popsicle if one exists, otherwise go to ice_cream_truck"""
+    def seek(self, delta_time: float):
+        """Fetch closest self-colored popsicle if one exists, otherwise go to ice cream truck"""
 
         # change position
         if self.state.is_in_air:
@@ -228,37 +237,44 @@ class CompetitorCat(BasicSprite):
             self.change_y -= game.GRAVITY
         else:
             self.change_y = 0.0
-            self.center_y = 200
+            self.center_y = self._height // 2 + 130
 
         self.center_x += self.change_x
 
         try:
             closest_popsicle = sorted(
-                [popsicle for popsicle in self.game_view.popsicles if popsicle.color == self.color],
+                [
+                    popsicle
+                    for popsicle in self.game_view.popsicles
+                    if popsicle.color_str == self.color_str
+                ],
                 key=lambda popsicle: abs(popsicle.center_x - self.center_x),
                 reverse=True,
             )[0]
         except IndexError:
             # move towards ice_cream_truck
-            delta_v = (
-                math.copysign(1, self.game_view.ice_cream_truck.center_x - self.center_x)
-                * self.acceleration_magnitude
+            self.truck_disp = self.game_view.ice_cream_truck.center_x - self.center_x
+            self.delta_v = (
+                math.copysign(1, self.truck_disp) * self.acceleration_magnitude * delta_time
             )
+            self.mode = "returning"
         else:
             # seek closest popsicle
             closest_popsicle_disp = closest_popsicle.center_x - self.center_x
-            delta_v = math.copysign(1, closest_popsicle_disp) * self.acceleration_magnitude
+            self.delta_v = math.copysign(1, closest_popsicle_disp) * self.acceleration_magnitude
+            self.mode = "fetching"
         finally:
-            self.change_x = Limits(-self.max_run_speed, self.max_run_speed).clamp(
-                self.change_x + delta_v
-            )
-
-    def apply_friction(self):
-
-        if self.move_state == game.STOP and not self.state.is_in_air:
-            self.change_x *= game.FRICTION
-            if abs(self.change_x) < 1:
-                self.change_x = 0
+            if (
+                self.mode in {"returning", "waiting"}
+                and (abs(self.truck_disp) <= self.game_view.ice_cream_truck._width / 2)
+                and self.change_x < self.speeds.SLIDE
+            ):
+                self.change_x = 0.0
+                self.mode = "waiting"
+            else:
+                self.change_x = Limits(-self.max_run_speed, self.max_run_speed).clamp(
+                    self.change_x + self.delta_v
+                )
 
 
 class Player(BasicSprite):
@@ -269,6 +285,7 @@ class Player(BasicSprite):
     JUMP_STOP_RATE = 0.9
     MAX_LIVES = 3
     texture: arcade.texture.Texture
+    alpha: int
 
     def __init__(
         self,
@@ -285,6 +302,7 @@ class Player(BasicSprite):
 
         # initial lives
         self.lives = self.MAX_LIVES
+        self.hit_timer = 0.0
 
         # get default/initial hitbox
         self.init_hitbox = self.texture.hit_box_points
@@ -351,6 +369,16 @@ class Player(BasicSprite):
 
         # for setting running animation frequency
         self.time_accumulator = 0.0
+
+    def get_hit(self):
+        """Doc."""
+
+        if self.lives >= 1:
+            if self.hit_timer <= 0:
+                self.hit_timer = 1.5  # seconds?
+                self.lives -= 1
+        else:
+            self.kill()
 
     def update_state(self, can_jump, n_jumps_since_ground, **kwargs):
         """Doc."""
@@ -444,11 +472,20 @@ class Player(BasicSprite):
 
         self.time_accumulator += delta_time
 
+        # got hit?
+        if self.hit_timer > 0:
+            self.alpha = 255 * int(not self.alpha)
+            self.hit_timer -= delta_time
+        else:
+            self.alpha = 255
+
         # stop spinning
         self.change_angle = 0
 
         # Jumping/Stalling/Falling animation
-        if (jumps_since_ground >= 1 or self.change_y < 0) and abs(self.change_x) <= self.speeds.RUN:
+        if (jumps_since_ground >= 1 or self.change_y < 0.0) and abs(
+            self.change_x
+        ) <= self.speeds.RUN:
             if 5 < self.change_y:
                 self.change_texture_and_hitbox("jumping", change_hitbox=True)
             elif -5 < self.change_y < 5:
@@ -496,7 +533,7 @@ class Player(BasicSprite):
             self.angle = 0
             self.change_texture_and_hitbox("standing")
 
-    def update_velocity(self):
+    def update_velocity(self):  # , delta_time: float):
         """Doc."""
         # TODO: attempt to seperate directions from magnitudes? (1D vector) - could make code clearer
 
