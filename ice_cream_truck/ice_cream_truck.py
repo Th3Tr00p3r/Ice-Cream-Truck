@@ -5,12 +5,14 @@ Ice Cream Truck Game
 
 from contextlib import suppress
 from pathlib import Path
+from random import choice, random
+from types import SimpleNamespace
 
 import arcade
 import game_constants as game
 import PIL
-from helper import crop_resize_concat_horizontally
-from sprites import IceCreamTruck, Player, Popsicle
+from helper import Vector, crop_resize_concat_horizontally
+from sprites import CompetitorCat, IceCreamTruck, Player, Popsicle
 
 # Assets path
 ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
@@ -54,6 +56,11 @@ class PlatformerView(arcade.View):
 
         # One sprite for the player, no more is needed
         self.player: Player = None
+
+        # Enemies
+        self.n_allowed_cats = 1
+        self.n_cats = 0
+        self.new_cat_prob_frame = 0.01
 
         # We need a physics engine as well
         self.physics_engine: arcade.PhysicsEnginePlatformer = None
@@ -132,7 +139,7 @@ class PlatformerView(arcade.View):
             game.PLAYER_START_POS,
             game.PLAYER_MOVE_SPEED,
             game.PLAYER_ACCELERATION_MAGNITUDE,
-            "green",
+            "red",
             map_width=self.map_width,
             keys_pressed=self.keys_pressed,
             scale=game.CHARACTER_SCALING,
@@ -140,6 +147,9 @@ class PlatformerView(arcade.View):
 
         # Setup the popsicle sprite list
         self.popsicles = arcade.SpriteList()
+
+        # Initiate the competitor cats sprite list
+        self.cats = arcade.SpriteList()
 
         # Reset the viewport
         self.view_left = 0
@@ -240,9 +250,39 @@ class PlatformerView(arcade.View):
         self.player.apply_friction()
         self.player.restrict_position(self.map_width)
 
+        # Update competitor cats
+        with suppress(AttributeError):
+            # AttributeError - no popsicles present
+            self.popsicles.update_animation(delta_time)
+            for cat in self.cats:
+                cat.seek()
+                # Prevent cat from going off-screen
+                cat.restrict_position(self.map_width)
+                # Check if popsicle hit ground
+                ground_hit = arcade.check_for_collision_with_list(
+                    sprite=cat, sprite_list=self.map_sprite_lists["ground"]
+                )
+                if ground_hit:
+                    cat.state.is_in_air = False
+
         # Throw Popsicle
         if (new_popsicle := self.ice_cream_truck.throw_popsicle()) is not None:
             self.popsicles.append(new_popsicle)
+
+        # Create new competitor cat
+        if self.n_cats < self.n_allowed_cats and random() < self.new_cat_prob_frame:
+            self.cats.append(
+                CompetitorCat(
+                    init_position=Vector(500, 500),  # TESTESTEST
+                    speeds=SimpleNamespace(
+                        RUN=10 / 2, SLIDE=5 / 2, JUMP=20 / 2, POUNCE=35 / 2
+                    ),  # pixels per frame
+                    acceleration_magnitude=0.75 / 2,
+                    color_str=choice(list(game.COLORS - {self.player.color_str})),
+                    game_view=self,
+                )
+            )
+            self.n_cats += 1
 
         # Update the player animation
         self.player.update_animation(delta_time, self.physics_engine.jumps_since_ground)
@@ -252,17 +292,26 @@ class PlatformerView(arcade.View):
 
         with suppress(TypeError):
             # Check if we've picked up a popsicle
-            popsicles_hit = arcade.check_for_collision_with_list(
+            popsicles_collected = arcade.check_for_collision_with_list(
                 sprite=self.player, sprite_list=self.popsicles
             )
 
-            for popsicle in popsicles_hit:
+            for popsicle in popsicles_collected:
                 # Add the coin score to our score
                 self.score += popsicle.point_value
                 # Play the coin sound
                 arcade.play_sound(self.coin_sound)
                 # Remove the popsicle
                 popsicle.remove_from_sprite_lists()
+
+        # Check for competitor collections
+        for cat in self.cats:
+            popsicles_hit = arcade.check_for_collision_with_list(
+                sprite=cat, sprite_list=self.popsicles
+            )
+            for popsicle in popsicles_hit:
+                if popsicle.color_str == cat.color_str:
+                    popsicle.remove_from_sprite_lists()
 
         #        # Has Roz collided with an enemy?
         #        enemies_hit = arcade.check_for_collision_with_list(
@@ -334,6 +383,7 @@ class PlatformerView(arcade.View):
 
         self.ice_cream_truck.draw()
         self.popsicles.draw()
+        self.cats.draw()
         self.player.draw()
 
         # Draw the score in the upper left

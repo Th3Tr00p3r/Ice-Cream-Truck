@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import arcade
 import game_constants as game
 import PIL
-from helper import Vector, tint_greyscale_pixels
+from helper import Limits, Vector, tint_greyscale_pixels
 
 # Assets path
 ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
@@ -73,12 +73,15 @@ class CompetitorCat(BasicSprite):
         init_position: Vector,
         speeds: SimpleNamespace,
         acceleration_magnitude: float,
-        color: str,
-        game_view: arcade.view,
+        color_str: str,
+        game_view: arcade.View,
         **kwargs,
     ):
 
         super().__init__(init_position, self.MAIN_TEXTURE_PATH / "catStanding.png", **kwargs)
+
+        # hold game view
+        self.game_view = game_view
 
         # initial lives
         self.lives = self.MAX_LIVES
@@ -112,17 +115,18 @@ class CompetitorCat(BasicSprite):
         self.texture_idx = 0
 
         # Load textures
+        self.color_str = color_str
         self.loaded_textures = SimpleNamespace(
-            standing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStanding.png", color),
+            standing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStanding.png", color_str),
             running=[
-                self.load_texture_pair(self.MAIN_TEXTURE_PATH / f"catRunning{i}.png", color)
+                self.load_texture_pair(self.MAIN_TEXTURE_PATH / f"catRunning{i}.png", color_str)
                 for i in (1, 2, 3, 4)
             ],
-            pouncing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning4.png", color),
-            sliding=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning1.png", color),
-            jumping=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catJumping.png", color),
-            stalling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStalling.png", color),
-            falling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catFalling.png", color),
+            pouncing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning4.png", color_str),
+            sliding=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning1.png", color_str),
+            jumping=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catJumping.png", color_str),
+            stalling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStalling.png", color_str),
+            falling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catFalling.png", color_str),
         )
         self.hitboxes = SimpleNamespace(
             **{
@@ -217,25 +221,37 @@ class CompetitorCat(BasicSprite):
     def seek(self):
         """Fetch closest self-colored popsicle if one exists, otherwise go to ice_cream_truck"""
 
+        # change position
+        if self.state.is_in_air:
+            self.center_y += self.change_y
+            # change speed (due to 'gravity')
+            self.change_y -= game.GRAVITY
+        else:
+            self.change_y = 0.0
+            self.center_y = 200
+
+        self.center_x += self.change_x
+
         try:
-            closest_popsicle_disp = sorted(
-                [
-                    popsicle.center_x - self.center_x
-                    for popsicle in self.game_view.popsicles
-                    if popsicle.color == self.color
-                ],
+            closest_popsicle = sorted(
+                [popsicle for popsicle in self.game_view.popsicles if popsicle.color == self.color],
                 key=lambda popsicle: abs(popsicle.center_x - self.center_x),
                 reverse=True,
             )[0]
         except IndexError:
             # move towards ice_cream_truck
-            self.change_x += (
-                math.copysign(1, self.center_x - self.game_view.ice_cream_truck.center_x)
+            delta_v = (
+                math.copysign(1, self.game_view.ice_cream_truck.center_x - self.center_x)
                 * self.acceleration_magnitude
             )
         else:
             # seek closest popsicle
-            self.change_x += math.copysign(1, closest_popsicle_disp) * self.acceleration_magnitude
+            closest_popsicle_disp = closest_popsicle.center_x - self.center_x
+            delta_v = math.copysign(1, closest_popsicle_disp) * self.acceleration_magnitude
+        finally:
+            self.change_x = Limits(-self.max_run_speed, self.max_run_speed).clamp(
+                self.change_x + delta_v
+            )
 
     def apply_friction(self):
 
@@ -259,7 +275,7 @@ class Player(BasicSprite):
         init_position: Vector,
         speeds: SimpleNamespace,
         acceleration_magnitude: float,
-        color: str,
+        color_str: str,
         map_width,
         keys_pressed,
         **kwargs,
@@ -305,17 +321,18 @@ class Player(BasicSprite):
         self.texture_idx = 0
 
         # Load textures
+        self.color_str = color_str
         self.loaded_textures = SimpleNamespace(
-            standing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStanding.png", color),
+            standing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStanding.png", color_str),
             running=[
-                self.load_texture_pair(self.MAIN_TEXTURE_PATH / f"catRunning{i}.png", color)
+                self.load_texture_pair(self.MAIN_TEXTURE_PATH / f"catRunning{i}.png", color_str)
                 for i in (1, 2, 3, 4)
             ],
-            pouncing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning4.png", color),
-            sliding=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning1.png", color),
-            jumping=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catJumping.png", color),
-            stalling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStalling.png", color),
-            falling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catFalling.png", color),
+            pouncing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning4.png", color_str),
+            sliding=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning1.png", color_str),
+            jumping=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catJumping.png", color_str),
+            stalling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStalling.png", color_str),
+            falling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catFalling.png", color_str),
         )
         self.hitboxes = SimpleNamespace(
             **{
@@ -501,13 +518,9 @@ class Player(BasicSprite):
             else:
                 self.acceleration = 0
 
-            self.change_x += self.acceleration
-
-            if abs(self.change_x) > self.max_run_speed:
-                if self.move_state == game.RIGHT:
-                    self.change_x = self.max_run_speed
-                elif self.move_state == game.LEFT:
-                    self.change_x = -self.max_run_speed
+            self.change_x = self.change_x = Limits(-self.max_run_speed, self.max_run_speed).clamp(
+                self.change_x + self.acceleration
+            )
 
             # stopping jump by letting go of key
             if (
@@ -550,24 +563,26 @@ class Popsicle(BasicSprite):
     """
 
     MAIN_PATH = ASSETS_PATH / "images" / "items"
-    pop_color_filename_dict = {
-        color: f"popsicle{color.capitalize()}.png" for color in game.POPSICLE_COLORS
-    }
+    pop_color_filename_dict = {color: f"popsicle{color.capitalize()}.png" for color in game.COLORS}
     BASE_POINTS = 10
     FROZEN_TIME = 1  # seconds?
     MELT_RATE = 0.99  # units?
     alpha: int
 
     def __init__(
-        self, init_position: Vector, throw_speed_ppf: float, throw_angle_degrees: int, color: str
+        self,
+        init_position: Vector,
+        throw_speed_ppf: float,
+        throw_angle_degrees: int,
+        color_str: str,
     ) -> None:
 
-        filename = self.pop_color_filename_dict[color]
+        filename = self.pop_color_filename_dict[color_str]
         super().__init__(init_position, self.MAIN_PATH / filename, scale=game.POPSICLE_SCALING)
 
         x_speed = -throw_speed_ppf * math.cos(throw_angle_degrees * math.pi / 180)
         y_speed = throw_speed_ppf * math.sin(throw_angle_degrees * math.pi / 180)
-        self.popsicle_color = color
+        self.color_str = color_str
         self.point_value = self.BASE_POINTS
 
         self.hitbox = self.texture.hit_box_points
@@ -652,5 +667,5 @@ class IceCreamTruck(BasicSprite):
                 Vector(self.center_x, self.center_y),
                 throw_speed_ppf=game.PLAYER_MOVE_SPEED.RUN * uniform(0.25, 1),
                 throw_angle_degrees=randint(45, 135),
-                color=choice(game.POPSICLE_COLORS),
+                color_str=choice(list(game.COLORS)),
             )

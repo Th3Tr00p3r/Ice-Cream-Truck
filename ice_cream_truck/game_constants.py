@@ -6,6 +6,9 @@ from types import SimpleNamespace
 
 from helper import ScreenProps, Vector
 
+# General
+COLORS = {"red", "blue", "green", "yellow", "brown", "white", "purple", "pink"}
+
 # Physics
 GRAVITY = 1.0
 FRICTION = 0.95
@@ -42,4 +45,3 @@ N_JUMPS = 2
 
 # Ice Cream Truck constants
 TRUCK_START_POS = Vector(750, 305)  # pixels from bottom, pixels from left
-POPSICLE_COLORS = ["red", "blue", "green", "yellow", "brown", "white", "purple", "pink"]

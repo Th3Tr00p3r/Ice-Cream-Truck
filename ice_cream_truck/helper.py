@@ -2,10 +2,199 @@
 Helper Module
 """
 
+from contextlib import suppress
 from dataclasses import asdict, dataclass, field
+from typing import Any, Tuple
 
 import numpy as np
 import PIL
+
+
+class Limits:
+    """Doc."""
+
+    def __init__(
+        self,
+        limits=(np.NINF, np.inf),
+        upper=np.inf,
+        dict_labels: Tuple[str, str] = None,
+        from_string=False,
+    ):
+
+        self.dict_labels = dict_labels
+
+        if from_string:
+            source_str = limits
+            self.lower, self.upper = generate_numbers_from_string(source_str)
+        else:
+            try:
+                self.lower, self.upper = limits
+            except ValueError:  # limits is not 2-iterable
+                raise TypeError(
+                    "Arguments must either be a single value (lower limit) or a 2-iterable"
+                )
+            except TypeError:  # limits is not iterable
+                self.lower, self.upper = limits, upper
+                if limits is None:
+                    return None
+            else:
+                if None in limits:
+                    return None
+
+    def __call__(self, *args, **kwargs):
+        self.__init__(*args, **kwargs)
+
+    def __repr__(self):
+        return f"Limits(lower={self.lower}, upper={self.upper})"
+
+    def __str__(self):
+        lower_frmt = ".2f"
+        with suppress(OverflowError):
+            if int(self.lower) == float(self.lower):
+                lower_frmt = "d"
+                self.lower = int(self.lower)  # ensure for stuff like 1e3 (round floats)
+
+        upper_frmt = ".2f"
+        with suppress(OverflowError):
+            if int(self.upper) == float(self.upper):
+                upper_frmt = "d"
+                self.upper = int(self.upper)  # ensure for stuff like 1e3 (round floats)
+
+        return f"({self.lower:{lower_frmt}}, {self.upper:{upper_frmt}})"
+
+    def __iter__(self):
+        yield from (self.lower, self.upper)
+
+    def __getitem__(self, idx):
+        return tuple(self)[idx]
+
+    def __len__(self):
+        return 2
+
+    def __and__(self, other):
+        self = self if self is not None else Limits()
+        other = other if other is not None else Limits()
+        lower = max(self[0], other[0])
+        upper = min(self[1], other[1])
+        return Limits(lower, upper)
+
+    def __eq__(self, other):
+        try:
+            return tuple(self) == other
+        except TypeError:
+            raise TypeError("Can only compare Limits to other instances or tuples")
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __gt__(self, other):
+        if isinstance(other, (int, float)):
+            return other < self.lower
+        if isinstance(other, Limits):
+            return other.upper < self.lower
+
+    def __lt__(self, other):
+        if isinstance(other, (int, float)):
+            return other > self.upper
+        if isinstance(other, Limits):
+            return other.lower > self.upper
+
+    def __contains__(self, other):
+        """
+        Checks if 'other' is in 'Limits'.
+        If:
+        other is a tuple/Limits: checks if full range is contained and returns bool
+        other is number: checks if number is contained in range and returns bool
+        """
+        try:
+            if len(other) == 2:
+                return (self[0] <= other[0]) and (self[1] >= other[1])
+        except TypeError:  # other is not 2-iterable
+            try:
+                return self.lower <= other <= self.upper
+            except TypeError:  # other is not a number
+                if other is None:
+                    return False
+                else:
+                    raise TypeError(
+                        "Can only compare Limits to other instances or 2-iterable objects."
+                    )
+
+    def valid_indices(self, arr: np.ndarray, as_bool=True):
+        """
+        Checks whether each element is contained and returns a boolean array of same shape.
+        __contains__ must return a single boolean array, otherwise would be included there.
+        """
+        if isinstance(arr, np.ndarray):
+            if as_bool:
+                return (arr >= self.lower) & (arr <= self.upper)
+            else:
+                return np.nonzero((arr >= self.lower) & (arr <= self.upper))[0]
+        else:
+            raise TypeError("Argument 'arr' must be a Numpy ndarray!")
+
+    def as_dict(self):
+        if self.dict_labels is not None:
+            return {key: val for key, val in zip(self.dict_labels, (self.lower, self.upper))}
+        else:
+            return {key: val for key, val in zip(("lower", "upper"), (self.lower, self.upper))}
+
+    def interval(self):
+        return abs(self.upper - self.lower)
+
+    def center(self):
+        """Get the center of the range"""
+
+        return sum(self) * 0.5
+
+    def clamp(self, obj):
+        """Force limit range on object"""
+
+        if isinstance(obj, (int, float)):
+            return max(min(self.upper, obj), self.lower)
+        elif hasattr(obj, "lower") and hasattr(obj, "upper"):
+            return Limits(self.clamp(obj.lower), self.clamp(obj.upper))
+        else:
+            raise TypeError("Clamped object must be either a Limits instance or a number!")
+
+    def as_range(self) -> range:
+        """Get a Python 'range' (generator)"""
+
+        return range(self.lower, self.upper)
+
+
+def can_float(value: Any) -> bool:
+    """Checks if 'value' can be turned into a float"""
+
+    try:
+        float(value)
+        return True
+    except (ValueError, TypeError):
+        if value == "-":  # consider hyphens part of float (minus sign)
+            return True
+        return False
+
+
+def number(x):
+    """Attempts to convert 'x' into an integer, a float if that fails."""
+
+    try:
+        return int(x)
+    except (ValueError, OverflowError):
+        return float(x)
+
+
+def generate_numbers_from_string(source_str):
+    """A generator function for getting numbers out of strings."""
+
+    i = 0
+    while i < len(source_str):
+        j = i + 1
+        while (j < len(source_str) + 1) and can_float(source_str[i:j]):
+            j += 1
+        with suppress(TypeError, ValueError):
+            yield number(source_str[i : j - 1])
+        i = j
 
 
 @dataclass
