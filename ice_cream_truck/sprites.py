@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import arcade
 import game_constants as game
+import numpy as np
 import PIL
 from helper import Limits, Vector, tint_greyscale_pixels
 
@@ -13,15 +14,52 @@ from helper import Limits, Vector, tint_greyscale_pixels
 ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
 
 
+class AnimatedTexture:
+    """Doc."""
+
+    # TODO: what are the units of rate?
+
+    def __init__(self, image_list, rate, should_loop=False):
+
+        self.image_iter = iter(image_list)
+        self.rate = rate
+        self.should_loop = should_loop
+        self.n_imgs = len(image_list)
+        self.timer = 0.0
+        self.img_idx = 0
+
+    def next(self, delta_time: float):
+        """Doc."""
+
+        if self.timer * self.rate >= 1:
+            self.img_idx += 1
+        self.timer += delta_time
+        return self.image_iter[self.img_idx]
+
+
 class BasicSprite(arcade.Sprite):
 
     texture: arcade.Texture
 
-    def __init__(self, init_position: Vector, texture_path: Path, **kwargs):
+    def __init__(self, init_position: Vector, **kwargs):
         init_x, init_y = init_position
-        super().__init__(filename=texture_path, center_x=init_x, center_y=init_y, **kwargs)
+        super().__init__(center_x=init_x, center_y=init_y, **kwargs)
 
-    def load_texture_pair(self, filename, color_tint: str = None):
+    def load_texture(self, filename, color_tint: str = None, **kwargs):
+        """
+        Load a texture pair, with the second being a mirror image.
+        Optionally, tint the greyscale pixels of the texture.
+        """
+
+        texture = arcade.load_texture(filename)
+
+        if color_tint is not None:
+            tinted_texture = tint_greyscale_pixels(texture.image, color_tint, **kwargs)
+            texture = arcade.Texture(str(tinted_texture), tinted_texture)
+
+        return texture
+
+    def load_texture_pair(self, filename, color_tint: str = None, **kwargs):
         """
         Load a texture pair, with the second being a mirror image.
         Optionally, tint the greyscale pixels of the texture.
@@ -31,10 +69,8 @@ class BasicSprite(arcade.Sprite):
         left_texture = arcade.load_texture(filename, flipped_horizontally=True)
 
         if color_tint is not None:
-            #            right_texture.image = tint_greyscale_pixels(right_texture.image, color_tint)
-            #            left_texture.image = tint_greyscale_pixels(left_texture.image, color_tint)
-            tinted_right = tint_greyscale_pixels(right_texture.image, color_tint)
-            tinted_left = tint_greyscale_pixels(left_texture.image, color_tint)
+            tinted_right = tint_greyscale_pixels(right_texture.image, color_tint, **kwargs)
+            tinted_left = tint_greyscale_pixels(left_texture.image, color_tint, **kwargs)
             right_texture = arcade.Texture(str(tinted_right), tinted_right)
             left_texture = arcade.Texture(str(tinted_left), tinted_left)
 
@@ -64,6 +100,54 @@ class BasicSprite(arcade.Sprite):
         self.texture = tint_greyscale_pixels(self.texture, color, **kwargs)
 
 
+class Poof(BasicSprite):
+    """Doc."""
+
+    MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "gifs"
+    ANIMATION_RATE = 1 / 0.05
+    BASE_SCALE = 0.3
+
+    def __init__(
+        self,
+        init_position: Vector,
+        color_str: str,
+        **kwargs,
+    ):
+
+        # TODO: perhaps there's no need for initial textures!
+        super().__init__(init_position, hit_box_algorithm=None, scale=self.BASE_SCALE, **kwargs)
+
+        self.loaded_textures = [
+            self.load_texture(self.MAIN_TEXTURE_PATH / f"poof{i}.png", color_str)
+            for i in range(1, 16)
+        ]
+        #        self.animated_textures = iter(self.loaded_textures)
+
+        self.timer = 0.0
+        self.texture_idx = 0
+
+    def reset(self, init_position: Vector, scale: float):
+        """Doc."""
+
+        self.center_x = init_position.x
+        self.center_y = init_position.y
+        self.scale = self.BASE_SCALE * scale
+        self.texture_idx = 0
+        self.animated_textures = iter(self.loaded_textures)
+
+    def update_animation(self, delta_time: float):
+        """Doc."""
+
+        self.timer += delta_time
+        if self.timer * self.ANIMATION_RATE > 1:
+            try:
+                self.texture = next(self.animated_textures)
+            except StopIteration:
+                self.kill()
+            else:
+                self.timer = 0.0
+
+
 class CompetitorCat(BasicSprite):
     """Doc."""
 
@@ -74,6 +158,7 @@ class CompetitorCat(BasicSprite):
     change_x: float
     change_y: float
     center_y: float
+    poof_dict = {color_str: Poof(Vector(0, 0), color_str) for color_str in game.COLORS}
 
     def __init__(
         self,
@@ -82,10 +167,19 @@ class CompetitorCat(BasicSprite):
         acceleration_magnitude: float,
         color_str: str,
         game_view: arcade.View,
+        scale=1,
         **kwargs,
     ):
 
-        super().__init__(init_position, self.MAIN_TEXTURE_PATH / "catStanding.png", **kwargs)
+        super().__init__(
+            init_position,
+            filename=self.MAIN_TEXTURE_PATH / "catStanding.png",
+            hit_box_algorithm="Detailed",
+            scale=scale,
+            **kwargs,
+        )
+
+        self.scale = scale
 
         # hold game view
         self.game_view = game_view
@@ -153,7 +247,7 @@ class CompetitorCat(BasicSprite):
         self.delta_v = 0.0
 
         # for setting running animation frequency
-        self.time_accumulator = 0.0
+        self.timer = 0.0
         self.face_switch_timer = 0.0
 
     def change_texture_and_hitbox(self, texture_name: str, idx=None, change_hitbox=False):
@@ -185,7 +279,7 @@ class CompetitorCat(BasicSprite):
         else:
             self.move_state = 0
 
-        self.time_accumulator += delta_time
+        self.timer += delta_time
 
         # stop spinning
         self.change_angle = 0
@@ -205,7 +299,7 @@ class CompetitorCat(BasicSprite):
 
         # Running animation
         elif not self.mode == "waiting":
-            if self.time_accumulator >= self.RUNNING_ANIMATION_FACTOR / (
+            if self.timer >= self.RUNNING_ANIMATION_FACTOR / (
                 (
                     abs(self.change_x)
                     + (
@@ -218,7 +312,7 @@ class CompetitorCat(BasicSprite):
                 / self.speeds.RUN
             ) / len(self.loaded_textures.running):
                 self.texture_idx += 1
-                self.time_accumulator = 0
+                self.timer = 0
             if self.texture_idx == len(self.loaded_textures.running):
                 self.texture_idx = 0
             self.change_texture_and_hitbox("running", idx=self.texture_idx, change_hitbox=True)
@@ -234,7 +328,7 @@ class CompetitorCat(BasicSprite):
         if self.state.is_in_air:
             self.center_y += self.change_y
             # change speed (due to 'gravity')
-            self.change_y -= game.GRAVITY
+            self.change_y -= game.GRAVITY * 0.1
         else:
             self.change_y = 0.0
             self.center_y = self._height // 2 + 130
@@ -276,6 +370,13 @@ class CompetitorCat(BasicSprite):
                     self.change_x + self.delta_v
                 )
 
+    def poof(self):
+        """Doc."""
+
+        poof = self.poof_dict[self.color_str]
+        poof.reset(Vector(self.center_x, self.center_y - self.height / 3), self.scale)
+        return poof
+
 
 class Player(BasicSprite):
     """Doc."""
@@ -284,6 +385,7 @@ class Player(BasicSprite):
     RUNNING_ANIMATION_FACTOR = 0.2
     JUMP_STOP_RATE = 0.9
     MAX_LIVES = 3
+    INV_TIME = 1.5  # seconds?
     texture: arcade.texture.Texture
     alpha: int
 
@@ -298,9 +400,15 @@ class Player(BasicSprite):
         **kwargs,
     ):
 
-        super().__init__(init_position, self.MAIN_TEXTURE_PATH / "catStanding.png", **kwargs)
+        super().__init__(
+            init_position,
+            filename=self.MAIN_TEXTURE_PATH / "catStanding.png",
+            hit_box_algorithm="Detailed",
+            **kwargs,
+        )
 
         # initial lives
+        self.is_alive = True
         self.lives = self.MAX_LIVES
         self.hit_timer = 0.0
 
@@ -368,17 +476,10 @@ class Player(BasicSprite):
         self.spin_speed = 30
 
         # for setting running animation frequency
-        self.time_accumulator = 0.0
+        self.timer = 0.0
 
-    def get_hit(self):
-        """Doc."""
-
-        if self.lives >= 1:
-            if self.hit_timer <= 0:
-                self.hit_timer = 1.5  # seconds?
-                self.lives -= 1
-        else:
-            self.kill()
+        # poof
+        self.poof_sprite = Poof(Vector(0, 0), self.color_str)
 
     def update_state(self, can_jump, n_jumps_since_ground, **kwargs):
         """Doc."""
@@ -470,10 +571,10 @@ class Player(BasicSprite):
     def update_animation(self, delta_time: float, jumps_since_ground: int):
         """Doc."""
 
-        self.time_accumulator += delta_time
+        self.timer += delta_time
 
         # got hit?
-        if self.hit_timer > 0:
+        if self.hit_timer > 0 and self.lives:
             self.alpha = 255 * int(not self.alpha)
             self.hit_timer -= delta_time
         else:
@@ -506,7 +607,7 @@ class Player(BasicSprite):
         # Running animation
         elif not self.move_state == game.STOP:
             self.angle = 0
-            if self.time_accumulator >= self.RUNNING_ANIMATION_FACTOR / (
+            if self.timer >= self.RUNNING_ANIMATION_FACTOR / (
                 (
                     abs(self.change_x)
                     + (
@@ -519,7 +620,7 @@ class Player(BasicSprite):
                 / self.speeds.RUN
             ) / len(self.loaded_textures.running):
                 self.texture_idx += 1
-                self.time_accumulator = 0
+                self.timer = 0
             if self.texture_idx == len(self.loaded_textures.running):
                 self.texture_idx = 0
             self.change_texture_and_hitbox("running", idx=self.texture_idx, change_hitbox=True)
@@ -567,14 +668,14 @@ class Player(BasicSprite):
             ):
                 self.change_y *= self.JUMP_STOP_RATE
 
-    def jump(self):
+    def jump(self, factor=1):
         """Doc."""
 
         # jumping is disabled while pouncing
         if self.state.pounce.is_pouncing:
             self.keys_pressed[arcade.key.SPACE] = False
         else:
-            self.change_y += self.speeds.JUMP
+            self.change_y += self.speeds.JUMP * factor
 
     def pounce(self):
         """Doc."""
@@ -593,6 +694,42 @@ class Player(BasicSprite):
             if abs(self.change_x) < 1:
                 self.change_x = 0
 
+    def can_kill_cat(self, cat) -> bool:
+        """Doc."""
+
+        return (
+            self.change_y < 0
+            and abs(self.center_x - cat.center_x) < cat.width / 3
+            and self.hit_timer <= self.INV_TIME * 0.9
+        )
+
+    def get_hit(self, cat):
+        """Doc."""
+
+        if (
+            self.change_y >= 0
+            and abs(self.center_x - cat.center_x) < cat.width / 2
+            and abs(self.center_y - cat.center_y) < cat.height / 2
+        ):
+            if self.lives >= 1 and self.hit_timer <= 0:
+                if self.lives > 1:
+                    self.hit_timer = self.INV_TIME  # seconds?
+                    self.change_x = choice([-50, 50])
+                self.lives -= 1
+
+    def poof(self):
+        """Doc."""
+
+        poof = self.poof_sprite
+        poof.reset(Vector(self.center_x, self.center_y - self.height / 3), self.scale)
+        return poof
+
+    def die(self):
+        """Doc."""
+
+        self.is_alive = False
+        self.kill()
+
 
 class Popsicle(BasicSprite):
     """
@@ -600,10 +737,10 @@ class Popsicle(BasicSprite):
     """
 
     MAIN_PATH = ASSETS_PATH / "images" / "items"
-    pop_color_filename_dict = {color: f"popsicle{color.capitalize()}.png" for color in game.COLORS}
+    white_pop_path = MAIN_PATH / "popsicleWhite.png"
     BASE_POINTS = 10
     FROZEN_TIME = 1  # seconds?
-    MELT_RATE = 0.99  # units?
+    MELT_RATE = 5  # units?
     alpha: int
 
     def __init__(
@@ -614,8 +751,23 @@ class Popsicle(BasicSprite):
         color_str: str,
     ) -> None:
 
-        filename = self.pop_color_filename_dict[color_str]
-        super().__init__(init_position, self.MAIN_PATH / filename, scale=game.POPSICLE_SCALING)
+        super().__init__(init_position, scale=game.POPSICLE_SCALING)
+
+        self.texture = self.load_texture(
+            self.white_pop_path,
+            color_str,
+            linear_beta=(0, 1),
+            threshold_deviation_from_grey=10,
+            should_tint_black=False,
+        )
+
+        melt_textures = []
+        for factor in np.linspace(0, 0.60, 10):
+            arr_img = np.array(self.texture.image)
+            arr_img[: int(self.texture.height * factor), :, 3] = 0
+            image = PIL.Image.fromarray(arr_img)
+            melt_textures.append(arcade.Texture(str(image), image))
+        self.melt_textures_iter = iter(melt_textures)
 
         x_speed = -throw_speed_ppf * math.cos(throw_angle_degrees * math.pi / 180)
         y_speed = throw_speed_ppf * math.sin(throw_angle_degrees * math.pi / 180)
@@ -627,7 +779,8 @@ class Popsicle(BasicSprite):
         self.change_x = x_speed
         self.change_y = y_speed
         self.change_angle = -math.copysign(1, x_speed) * throw_speed_ppf
-        self.melt_timer = 0.0
+        self.frozen_timer = 0.0
+        self.melting_timer = 0.0
 
     def move(self):
         """Doc."""
@@ -647,8 +800,7 @@ class Popsicle(BasicSprite):
 
         if self.change_y < -0.01:
             self.change_angle *= uniform(-1.5, 1.5)
-            self.change_y *= -0.5
-            self.change_y *= 0.75
+            self.change_y *= -uniform(0.25, 0.75)
         else:
             self.stop()
 
@@ -661,15 +813,22 @@ class Popsicle(BasicSprite):
         self.change_angle = 0
         self.angle = 0
 
-    def melt(self, time_delta: float):
+    def melt(self, delta_time: float):
         """Doc."""
 
-        self.melt_timer += time_delta
-        if self.melt_timer > self.FROZEN_TIME:
-            self.alpha = int(self.MELT_RATE * self.alpha)
-            self.point_value = int(self.alpha / 255 * self.BASE_POINTS)
-            if self.alpha < 20:
-                self.kill()
+        if self.frozen_timer > self.FROZEN_TIME:
+
+            self.melting_timer += delta_time
+            if self.melting_timer * self.MELT_RATE > 1:
+                try:
+                    self.texture = next(self.melt_textures_iter)
+                    self.point_value -= int(self.BASE_POINTS * 0.1)
+                except StopIteration:
+                    self.kill()
+                else:
+                    self.melting_timer = 0.0
+        else:
+            self.frozen_timer += delta_time
 
 
 class IceCreamTruck(BasicSprite):
@@ -678,7 +837,9 @@ class IceCreamTruck(BasicSprite):
     MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "enemies"
 
     def __init__(self, init_position: Vector, throw_probability_frame: float, **kwargs):
-        super().__init__(init_position, self.MAIN_TEXTURE_PATH / "truckIceCream1.png", **kwargs)
+        super().__init__(
+            init_position, filename=self.MAIN_TEXTURE_PATH / "truckIceCream1.png", **kwargs
+        )
 
         # Default to face-right
         self.face_direction = game.FACE_RIGHT

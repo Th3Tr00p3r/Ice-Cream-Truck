@@ -7,7 +7,8 @@ from types import SimpleNamespace
 from helper import ScreenProps, Vector
 
 # General
-COLORS = {"red", "blue", "green", "yellow", "brown", "white", "purple", "pink"}
+COLORS = {"red", "deepskyblue", "lime", "yellow", "brown", "white", "mediumpurple", "pink"}
+DEFAULT_FONT_SIZE = 40
 
 # Physics
 GRAVITY = 1.0

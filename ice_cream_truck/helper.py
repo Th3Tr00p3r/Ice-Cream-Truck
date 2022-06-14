@@ -199,8 +199,8 @@ def generate_numbers_from_string(source_str):
 
 @dataclass
 class Vector:
-    x: int
-    y: int
+    x: float
+    y: float
 
     def __call__(self, *args, **kwargs):
         self.__init__(*args, **kwargs)
@@ -261,23 +261,29 @@ class ScreenProps:
 def tint_greyscale_pixels(
     img: PIL.Image,
     color: str,
+    should_tint_black: bool = True,
     threshold_shade_of_grey: float = 100.0,
     threshold_deviation_from_grey: float = 35.0,
-    linear_beta: tuple = (135.0, 1.0),
+    linear_beta: tuple = (0.8, 1.05),
 ) -> PIL.Image:
 
     rgb_color = PIL.ImageColor.getrgb(color)
 
     img_arr = np.array(img)
     norm_greyscale_img_arr = img_arr[:, :, :3].mean(2) / 255
-    greyscale_mask = (img_arr[:, :, :3].std(2) <= threshold_deviation_from_grey) & (
-        img_arr[:, :, :3].mean(2) <= threshold_shade_of_grey
-    )
+    if should_tint_black:
+        greyscale_mask = (img_arr[:, :, :3].std(2) <= threshold_deviation_from_grey) & (
+            img_arr[:, :, :3].mean(2) <= threshold_shade_of_grey
+        )
+    else:
+        greyscale_mask = (img_arr[:, :, :3].std(2) <= threshold_deviation_from_grey) & (
+            img_arr[:, :, :3].mean(2) > threshold_shade_of_grey
+        )
 
     delta, factor = linear_beta
     for dim, color_band in enumerate(rgb_color):
-        img_arr[greyscale_mask, dim] = (
-            (norm_greyscale_img_arr[greyscale_mask] + delta) * color_band * factor
+        img_arr[greyscale_mask, dim] = np.clip(
+            (norm_greyscale_img_arr[greyscale_mask] + delta) * color_band * factor, 0, 255
         )
 
     img_arr = np.clip(img_arr, 0, 255)
