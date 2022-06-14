@@ -362,6 +362,7 @@ class PlatformerView(arcade.View):
             )
             for popsicle in popsicles_collided_with_cat:
                 if popsicle.color_str == cat.color_str:
+                    cat.sought_popsicle = None
                     popsicle.remove_from_sprite_lists()
 
             if cat in cats_collided_with_player:

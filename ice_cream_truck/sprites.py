@@ -45,6 +45,8 @@ class BasicSprite(arcade.Sprite):
         init_x, init_y = init_position
         super().__init__(center_x=init_x, center_y=init_y, **kwargs)
 
+        self.is_off_screen = False
+
     def load_texture(self, filename, color_tint: str = None, **kwargs):
         """
         Load a texture pair, with the second being a mirror image.
@@ -87,10 +89,12 @@ class BasicSprite(arcade.Sprite):
             self.left = 0
             if should_kill:
                 self.kill()
+                self.is_off_screen = True
         if self.right >= map_width:
             self.right = map_width
             if should_kill:
                 self.kill()
+                self.is_off_screen = True
         if self.bottom < 0:
             self.bottom = 0
 
@@ -250,6 +254,8 @@ class CompetitorCat(BasicSprite):
         self.timer = 0.0
         self.face_switch_timer = 0.0
 
+        self.sought_popsicle: Popsicle = None
+
     def change_texture_and_hitbox(self, texture_name: str, idx=None, change_hitbox=False):
         """Doc."""
 
@@ -351,12 +357,19 @@ class CompetitorCat(BasicSprite):
             self.delta_v = (
                 math.copysign(1, self.truck_disp) * self.acceleration_magnitude * delta_time
             )
+            self.sought_popsicle = None
             self.mode = "returning"
         else:
-            # seek closest popsicle
-            closest_popsicle_disp = closest_popsicle.center_x - self.center_x
-            self.delta_v = math.copysign(1, closest_popsicle_disp) * self.acceleration_magnitude
-            self.mode = "fetching"
+            if (
+                self.sought_popsicle is None or self.sought_popsicle.is_off_screen
+            ):  # seek closest popsicle
+                self.sought_popsicle = closest_popsicle
+                self.mode = "fetching"
+            self.delta_v = (
+                math.copysign(1, self.sought_popsicle.center_x - self.center_x)
+                * self.acceleration_magnitude
+            )
+
         finally:
             if (
                 self.mode in {"returning", "waiting"}
@@ -762,9 +775,13 @@ class Popsicle(BasicSprite):
         )
 
         melt_textures = []
-        for factor in np.linspace(0, 0.60, 10):
+        h = self.texture.height
+        w = self.texture.width
+        for x_factor, y_factor in zip(np.linspace(0.5, 0.875, 10), np.linspace(0, 0.2, 10)):
             arr_img = np.array(self.texture.image)
-            arr_img[: int(self.texture.height * factor), :, 3] = 0
+            arr_img[: int(h * y_factor), :, 3] = 0
+            arr_img[:, : int(w / 2 * x_factor), 3] = 0
+            arr_img[:, int(w * (1 - x_factor / 2)) :, 3] = 0
             image = PIL.Image.fromarray(arr_img)
             melt_textures.append(arcade.Texture(str(image), image))
         self.melt_textures_iter = iter(melt_textures)
