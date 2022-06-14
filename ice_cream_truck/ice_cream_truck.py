@@ -26,6 +26,8 @@ ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
 # Red: small size, fast run/jump speed, low health, can air-roll (3rd jump + left/right), superpower is time-stop: many pops are thrown then everything slows down but the player, for a time
 # Yellow: big size, slow run/jump speed, high health, can drop from jump and kill with small blast radius, superpower is popsicle magnet for a time
 # TODO: aura around cat when superpower is ready
+# TODO: kill can only happen if player is ABOVE cat (except when pounce-kill)
+# TODO: add score multiplier for 10 seconds after killing a cat. Timer is reset and multiplier increased by 1 for each consecutive cat killed
 
 
 class GameWindow(arcade.Window):
@@ -236,7 +238,7 @@ class PlatformerView(arcade.View):
             self.keys_pressed[key] = False
             self.player.update_velocity()
 
-    def on_update(self, delta_time: float) -> None:
+    def on_update(self, delta_time: float) -> None:  # NOQA # C901
         """Updates the position of all screen objects
 
         Arguments:
@@ -269,16 +271,18 @@ class PlatformerView(arcade.View):
             self.popsicles.update_animation(delta_time)
             for popsicle in self.popsicles:
                 popsicle.move()
-                # Check if popsicles flew off-screen
-                popsicle.restrict_position(self.map_width, should_kill=True)
-                # Check if popsicle hit ground
-                ground_hit = arcade.check_for_collision_with_list(
-                    sprite=popsicle, sprite_list=self.map_sprite_lists["ground"]
-                )
-                if ground_hit:
-                    popsicle.bounce()
-                    # melt popsicle
-                    popsicle.melt(delta_time)
+                # Check if popsicle flew off-screen or hit ground
+                if popsicle.type == "regular":
+                    popsicle.restrict_position(self.map_width, should_kill=True)
+                    ground_hit = arcade.check_for_collision_with_list(
+                        sprite=popsicle, sprite_list=self.map_sprite_lists["ground"]
+                    )
+                    if ground_hit:
+                        popsicle.bounce()
+                        # melt popsicle
+                        popsicle.melt(delta_time)
+                else:  # heart
+                    popsicle.restrict_position(self.map_width, should_kill=True, no_bottom=True)
 
         # Update player movement based on the physics engine
         with suppress(OSError, GLException):  # NOTE: error caused by unpausing?
@@ -340,16 +344,26 @@ class PlatformerView(arcade.View):
             )
 
             for popsicle in popsicles_collected:
-                # Add the coin score to our score
-                self.score += (
-                    popsicle.point_value * 3
-                    if popsicle.color_str == self.player.color_str
-                    else popsicle.point_value
-                )
-                # Play the coin sound
-                arcade.play_sound(self.coin_sound)
+                if popsicle.type == "heart":
+                    if self.player.lives < self.player.MAX_LIVES:
+                        self.player.lives += 1
+                    else:
+                        self.score += popsicle.point_value
+                    # Play the coin sound
+                    arcade.play_sound(self.coin_sound)
+                else:  # regular
+                    # Add the coin score to our score
+                    self.score += (
+                        popsicle.point_value * 5
+                        if popsicle.color_str == self.player.color_str
+                        else popsicle.point_value
+                    )
+                    # Play the coin sound
+                    arcade.play_sound(self.coin_sound)
+                    # mark as off-screen (for other cats)
+                    popsicle.is_off_screen = True
                 # Remove the popsicle
-                popsicle.remove_from_sprite_lists()
+                popsicle.kill()
 
         # Check for competitor collisions
         cats_collided_with_player = arcade.check_for_collision_with_list(

@@ -82,7 +82,7 @@ class BasicSprite(arcade.Sprite):
             LEFT=left_texture,
         )
 
-    def restrict_position(self, map_width, should_kill=False):
+    def restrict_position(self, map_width, should_kill=False, no_bottom=False):
         """Restrict sprite position so screen width and bottom - either treat as ground/wall or kill"""
 
         if self.left < 0:
@@ -96,7 +96,11 @@ class BasicSprite(arcade.Sprite):
                 self.kill()
                 self.is_off_screen = True
         if self.bottom < 0:
-            self.bottom = 0
+            if no_bottom:
+                self.kill()
+                self.is_off_screen = True
+            else:
+                self.bottom = 0
 
     def tint_texture(self, texture: PIL.Image, color: str, **kwargs):
         """Doc."""
@@ -397,7 +401,7 @@ class Player(BasicSprite):
     MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "cat"
     RUNNING_ANIMATION_FACTOR = 0.2
     JUMP_STOP_RATE = 0.9
-    MAX_LIVES = 3
+    MAX_LIVES = 5
     INV_TIME = 1.5  # seconds?
     texture: arcade.texture.Texture
     alpha: int
@@ -422,7 +426,7 @@ class Player(BasicSprite):
 
         # initial lives
         self.is_alive = True
-        self.lives = self.MAX_LIVES
+        self.lives = self.MAX_LIVES - 2
         self.hit_timer = 0.0
 
         # get default/initial hitbox
@@ -745,59 +749,30 @@ class Player(BasicSprite):
 
 
 class Popsicle(BasicSprite):
-    """
-    An collectible popsicle sprite. Gets thrown away by the 'Ice-Cream Man' and possibly collected by the 'Cat'.
-    """
-
-    MAIN_PATH = ASSETS_PATH / "images" / "items"
-    white_pop_path = MAIN_PATH / "popsicleWhite.png"
-    BASE_POINTS = 10
-    FROZEN_TIME = 1  # seconds?
-    MELT_RATE = 5  # units?
-    alpha: int
+    """Doc."""
 
     def __init__(
         self,
         init_position: Vector,
         throw_speed_ppf: float,
         throw_angle_degrees: int,
-        color_str: str,
+        *args,
+        type="regular",
+        **kwargs,
     ) -> None:
 
-        super().__init__(init_position, scale=game.POPSICLE_SCALING)
+        super().__init__(init_position, **kwargs)
 
-        self.texture = self.load_texture(
-            self.white_pop_path,
-            color_str,
-            linear_beta=(0, 1),
-            threshold_deviation_from_grey=10,
-            should_tint_black=False,
-        )
-
-        melt_textures = []
-        h = self.texture.height
-        w = self.texture.width
-        for x_factor, y_factor in zip(np.linspace(0.5, 0.875, 10), np.linspace(0, 0.2, 10)):
-            arr_img = np.array(self.texture.image)
-            arr_img[: int(h * y_factor), :, 3] = 0
-            arr_img[:, : int(w / 2 * x_factor), 3] = 0
-            arr_img[:, int(w * (1 - x_factor / 2)) :, 3] = 0
-            image = PIL.Image.fromarray(arr_img)
-            melt_textures.append(arcade.Texture(str(image), image))
-        self.melt_textures_iter = iter(melt_textures)
+        self.type = type
 
         x_speed = -throw_speed_ppf * math.cos(throw_angle_degrees * math.pi / 180)
         y_speed = throw_speed_ppf * math.sin(throw_angle_degrees * math.pi / 180)
-        self.color_str = color_str
-        self.point_value = self.BASE_POINTS
-
-        self.hitbox = self.texture.hit_box_points
 
         self.change_x = x_speed
         self.change_y = y_speed
         self.change_angle = -math.copysign(1, x_speed) * throw_speed_ppf
-        self.frozen_timer = 0.0
-        self.melting_timer = 0.0
+
+        self.color_str: str = None
 
     def move(self):
         """Doc."""
@@ -830,6 +805,52 @@ class Popsicle(BasicSprite):
         self.change_angle = 0
         self.angle = 0
 
+
+class RegularPopsicle(Popsicle):
+    """
+    An collectible popsicle sprite. Gets thrown away by the 'Ice-Cream Man' and possibly collected by the 'Cat'.
+    """
+
+    MAIN_PATH = ASSETS_PATH / "images" / "items"
+    white_pop_path = MAIN_PATH / "popsicleWhite.png"
+    BASE_POINTS = 10
+    FROZEN_TIME = 1  # seconds?
+    MELT_RATE = 5  # units?
+
+    def __init__(
+        self,
+        color_str: str,
+        *args,
+    ) -> None:
+
+        super().__init__(*args, scale=game.POPSICLE_SCALING)
+
+        self.texture = self.load_texture(
+            self.white_pop_path,
+            color_str,
+            linear_beta=(0, 1),
+            threshold_deviation_from_grey=10,
+            should_tint_black=False,
+        )
+
+        melt_textures = []
+        h = self.texture.height
+        w = self.texture.width
+        for x_factor, y_factor in zip(np.linspace(0.5, 0.875, 10), np.linspace(0, 0.2, 10)):
+            arr_img = np.array(self.texture.image)
+            arr_img[: int(h * y_factor), :, 3] = 0
+            arr_img[:, : int(w / 2 * x_factor), 3] = 0
+            arr_img[:, int(w * (1 - x_factor / 2)) :, 3] = 0
+            image = PIL.Image.fromarray(arr_img)
+            melt_textures.append(arcade.Texture(str(image), image))
+        self.melt_textures_iter = iter(melt_textures)
+
+        self.color_str = color_str
+        self.point_value = self.BASE_POINTS
+
+        self.frozen_timer = 0.0
+        self.melting_timer = 0.0
+
     def melt(self, delta_time: float):
         """Doc."""
 
@@ -846,6 +867,25 @@ class Popsicle(BasicSprite):
                     self.melting_timer = 0.0
         else:
             self.frozen_timer += delta_time
+
+
+class HeartPopsicle(Popsicle):
+    """Doc."""
+
+    TEXTURE_PATH = ASSETS_PATH / "images" / "items" / "popsicleHeart.png"
+
+    def __init__(
+        self,
+        *args,
+    ) -> None:
+
+        super().__init__(*args, type="heart", scale=game.POPSICLE_SCALING)
+
+        self.texture = self.load_texture(
+            self.TEXTURE_PATH,
+        )
+
+        self.point_value = 100
 
 
 class IceCreamTruck(BasicSprite):
@@ -877,10 +917,17 @@ class IceCreamTruck(BasicSprite):
     def throw_popsicle(self):
         """Throw a random (color, angle) popsicle."""
 
-        if random() < self.throw_probability_frame:
-            return Popsicle(
+        if random() < self.throw_probability_frame * 0.005:
+            return HeartPopsicle(
                 Vector(self.center_x, self.center_y),
-                throw_speed_ppf=game.PLAYER_MOVE_SPEED.RUN * uniform(0.25, 1),
-                throw_angle_degrees=randint(45, 135),
-                color_str=choice(list(game.COLORS)),
+                game.PLAYER_MOVE_SPEED.RUN * uniform(0.75, 1.15),
+                randint(75, 105),
+            )
+
+        elif random() < self.throw_probability_frame:
+            return RegularPopsicle(
+                choice(list(game.COLORS)),
+                Vector(self.center_x, self.center_y),
+                game.PLAYER_MOVE_SPEED.RUN * uniform(0.25, 1),
+                randint(45, 135),
             )
