@@ -66,6 +66,7 @@ class PlatformerView(arcade.View):
 
         # One sprite for the player, no more is needed
         self.player: Player = None
+        self.MAX_PLAYER_LIVES = 5
 
         # We need a physics engine as well
         self.physics_engine: arcade.PhysicsEnginePlatformer = None
@@ -457,7 +458,7 @@ class PlatformerView(arcade.View):
 
         # Draw lives HUD in the upper right
         if self.player.lives != self.last_drawn_lives:
-            new_lives_image = self.get_lives_hud(self.player.MAX_LIVES, self.player.lives)
+            new_lives_image = self.get_lives_hud(self.MAX_PLAYER_LIVES, self.player.lives)
             self.lives_image = arcade.Texture(str(new_lives_image), new_lives_image)
             self.last_drawn_lives = self.player.lives
 
