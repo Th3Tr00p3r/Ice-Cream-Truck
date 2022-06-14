@@ -21,13 +21,14 @@ ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
 # TODO: add different behaviours for different-colored cats (wander, jump around, sleep, run  side to side)
 # TODO: pounce-kill should only be allowed for blue cat
 # TODO: add sounds (getting hit, killing, competitor grabs popsicle, etc.)
-# TODO: add different cats (blue, red, yellow) with different abilities:
+# TODO: add different cats (blue, red, yellow) with different abilities: (create a base Player class and subclasses BluePlayer etc. with different move methods but same animation etc.)
 # Blue: medium size/run/jump speed, medium health, pounce-kill-jump, superpower is only blue popsicles for a time
 # Red: small size, fast run/jump speed, low health, can air-roll (3rd jump + left/right), superpower is time-stop: many pops are thrown then everything slows down but the player, for a time
 # Yellow: big size, slow run/jump speed, high health, can drop from jump and kill with small blast radius, superpower is popsicle magnet for a time
 # TODO: aura around cat when superpower is ready
-# TODO: kill can only happen if player is ABOVE cat (except when pounce-kill)
 # TODO: add score multiplier for 10 seconds after killing a cat. Timer is reset and multiplier increased by 1 for each consecutive cat killed
+# TODO: scroll_viewport up only!
+# TODO: add animation effect for ice cream truck - shake while no popsicles are thrown (looking for popsicles...)
 
 
 class GameWindow(arcade.Window):
