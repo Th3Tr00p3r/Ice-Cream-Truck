@@ -436,6 +436,7 @@ class PlayerCat(BasicSprite):
     MAX_LIVES = 5
     N_REQUIRED_FOR_SUPERPOWER = 25
     INV_TIME = 1.5
+    POUNCE_RECOV = 50  # TODO: units?..
     texture: arcade.texture.Texture
     alpha: int
 
@@ -451,6 +452,7 @@ class PlayerCat(BasicSprite):
         speeds: SimpleNamespace,
         acceleration_magnitude: float,
         color_str: str,
+        aura_color_str: str,
         lives=3,
         **kwargs,
     ):
@@ -491,6 +493,13 @@ class PlayerCat(BasicSprite):
                 finishing_pounce=False,
                 recovery_timer=0,
             ),
+            air_dash=SimpleNamespace(
+                can_air_dash=False,
+            ),
+            drop=SimpleNamespace(
+                can_drop=False,
+                is_dropping=False,
+            ),
             superpower=SimpleNamespace(
                 is_ready=False,
                 is_on=False,
@@ -507,6 +516,7 @@ class PlayerCat(BasicSprite):
 
         # Load textures
         self.color_str = color_str
+        self.aura_color_str = aura_color_str
         self.loaded_textures = self.color_textures_dict[color_str].textures
         self.hitboxes = SimpleNamespace(
             **{
@@ -565,7 +575,7 @@ class PlayerCat(BasicSprite):
 
         # pounce recovery
         if self.state.pounce.finishing_pounce:
-            self.state.pounce.recovery_timer = 50
+            self.state.pounce.recovery_timer = self.POUNCE_RECOV
         elif self.state.pounce.recovery_timer > 0:
             self.state.pounce.recovery_timer -= 1
 
@@ -574,6 +584,9 @@ class PlayerCat(BasicSprite):
 
         # check if in air
         self.state.is_in_air = self.state.jump.is_jumping or self.state.pounce.is_pouncing
+
+        # check if dropping (YellowCat)
+        self.state.drop.is_dropping = self.state.drop.is_dropping and self.state.is_in_air
 
         self._update_move_direction()
 
@@ -585,30 +598,37 @@ class PlayerCat(BasicSprite):
     def _update_move_direction(self):
         """Decide if player is moving left, moving right, or stopping, based on pressed keys"""
 
-        is_only_left_pressed = (
-            self.keys_pressed[arcade.key.LEFT] and not self.keys_pressed[arcade.key.RIGHT]
-        )
-        is_only_right_pressed = (
-            self.keys_pressed[arcade.key.RIGHT] and not self.keys_pressed[arcade.key.LEFT]
-        )
-        are_both_pressed = (
-            self.keys_pressed[arcade.key.RIGHT] and self.keys_pressed[arcade.key.LEFT]
-        )
-        are_none_pressed = (
-            not self.keys_pressed[arcade.key.RIGHT] and not self.keys_pressed[arcade.key.LEFT]
-        )
-        is_changing_to_left = are_both_pressed and self.keys_pressed["LAST"] == arcade.key.LEFT
-        is_changing_to_right = are_both_pressed and self.keys_pressed["LAST"] == arcade.key.RIGHT
-        is_moving_left = is_only_left_pressed or is_changing_to_left
-        is_moving_right = is_only_right_pressed or is_changing_to_right
-        self.state.was_moving_left = (
-            are_none_pressed and self.keys_pressed["LAST"] == arcade.key.LEFT
-        )
-        self.state.was_moving_right = (
-            are_none_pressed and self.keys_pressed["LAST"] == arcade.key.RIGHT
-        )
+        if not self.state.drop.is_dropping:
 
-        self.move_state = int(is_moving_right) - int(is_moving_left)
+            is_only_left_pressed = (
+                self.keys_pressed[arcade.key.LEFT] and not self.keys_pressed[arcade.key.RIGHT]
+            )
+            is_only_right_pressed = (
+                self.keys_pressed[arcade.key.RIGHT] and not self.keys_pressed[arcade.key.LEFT]
+            )
+            are_both_pressed = (
+                self.keys_pressed[arcade.key.RIGHT] and self.keys_pressed[arcade.key.LEFT]
+            )
+            are_none_pressed = (
+                not self.keys_pressed[arcade.key.RIGHT] and not self.keys_pressed[arcade.key.LEFT]
+            )
+            is_changing_to_left = are_both_pressed and self.keys_pressed["LAST"] == arcade.key.LEFT
+            is_changing_to_right = (
+                are_both_pressed and self.keys_pressed["LAST"] == arcade.key.RIGHT
+            )
+            is_moving_left = is_only_left_pressed or is_changing_to_left
+            is_moving_right = is_only_right_pressed or is_changing_to_right
+            self.state.was_moving_left = (
+                are_none_pressed and self.keys_pressed["LAST"] == arcade.key.LEFT
+            )
+            self.state.was_moving_right = (
+                are_none_pressed and self.keys_pressed["LAST"] == arcade.key.RIGHT
+            )
+
+            self.move_state = int(is_moving_right) - int(is_moving_left)
+
+        else:
+            self.move_state = 0
 
     def change_texture_and_hitbox(self, texture_name: str, idx=None, change_hitbox=False):
         """Doc."""
@@ -776,8 +796,7 @@ class PlayerCat(BasicSprite):
         """Doc."""
 
         if (
-            self.change_y >= 0
-            and abs(self.center_x - cat.center_x) < cat.width / 2
+            abs(self.center_x - cat.center_x) < cat.width / 2
             and abs(self.center_y - cat.center_y) < cat.height / 2
         ):
             if self.lives >= 1 and self.hit_timer <= 0:
@@ -802,7 +821,7 @@ class PlayerCat(BasicSprite):
     def add_aura_to_texture(self):
         """Add an aura effect to the current texture"""
 
-        aura_img = get_aura_image(self.texture.image, self.color_str)
+        aura_img = get_aura_image(self.texture.image, self.aura_color_str)
         self.texture = arcade.Texture(str(aura_img), aura_img)
 
     def update_superpower_timer(self, delta_time):
@@ -836,6 +855,7 @@ class BlueCat(PlayerCat):
             speeds=SimpleNamespace(RUN=10, SLIDE=5, JUMP=20, POUNCE=35),
             acceleration_magnitude=0.75,
             color_str="deepskyblue",
+            aura_color_str="skyblue",
             scale=game.CHARACTER_SCALING,
             lives=3,
             **kwargs,
@@ -869,6 +889,9 @@ class BlueCat(PlayerCat):
 class RedCat(PlayerCat):
     """Doc."""
 
+    RUNNING_ANIMATION_FACTOR = 0.16
+    POUNCE_RECOV = 40  # TODO: units?..
+
     def __init__(
         self,
         *args,
@@ -880,14 +903,43 @@ class RedCat(PlayerCat):
             speeds=SimpleNamespace(RUN=12, SLIDE=6, JUMP=24, POUNCE=42),
             acceleration_magnitude=1.08,
             color_str="red",
-            scale=game.CHARACTER_SCALING * 0.8,
+            aura_color_str="palevioletred",
+            scale=game.CHARACTER_SCALING * 0.9,
             lives=2,
             **kwargs,
         )
 
+    def air_dash(self):
+        """Doc"""
+
+        if self.state.is_in_air:
+            self.state.air_dash.is_dashing = True
+            if self.move_state == game.LEFT:
+                self.change_x = -self.speeds.POUNCE
+            elif self.move_state == game.RIGHT:
+                self.change_x = self.speeds.POUNCE
+            self.change_y = self.speeds.JUMP
+
+    def get_hit(self, cat):
+        """Doc."""
+
+        if (
+            not self.state.pounce.is_pouncing
+            and abs(self.center_x - cat.center_x) < cat.width / 2
+            and abs(self.center_y - cat.center_y) < cat.height / 2
+        ):
+            if self.lives >= 1 and self.hit_timer <= 0:
+                if self.lives > 1:
+                    self.hit_timer = self.INV_TIME  # seconds?
+                    self.change_x = choice([-50, 50])
+                self.lives -= 1
+
 
 class YellowCat(PlayerCat):
     """Doc."""
+
+    RUNNING_ANIMATION_FACTOR = 0.24
+    POUNCE_RECOV = 60  # TODO: units?..
 
     def __init__(
         self,
@@ -899,11 +951,44 @@ class YellowCat(PlayerCat):
             *args,
             speeds=SimpleNamespace(RUN=8, SLIDE=4, JUMP=19.2, POUNCE=28),
             acceleration_magnitude=0.48,
-            color_str="yellow",
-            scale=game.CHARACTER_SCALING * 1.2,
+            color_str="gold",
+            aura_color_str="yellow",
+            scale=game.CHARACTER_SCALING * 1.1,
             lives=4,
             **kwargs,
         )
+
+        self.state.drop.can_drop = True
+
+    def drop(self):
+        """Doc."""
+
+        if self.state.is_in_air:
+            self.state.drop.is_dropping = True
+            self.change_x = 0.0
+            self.change_y = -self.speeds.JUMP
+
+    def can_kill_cat(self, cat) -> bool:
+        """Doc."""
+
+        # area damage when dropping
+        if self.state.drop.is_dropping:
+            did_kill = abs(self.center_x - cat.center_x) < cat.width * 3
+
+        else:
+            did_kill = (
+                self.change_y < 0
+                and self.center_y > cat.center_y - cat.height * 1 / 3
+                and abs(self.center_x - cat.center_x) < cat.width / 3
+                and self.hit_timer <= self.INV_TIME * 0.9
+                and not (self.state.pounce.is_pouncing or self.state.pounce.finishing_pounce)
+            )
+
+        if did_kill:
+            self.change_y = 0
+            self.jump(factor=2)
+
+        return did_kill
 
 
 class Popsicle(BasicSprite):

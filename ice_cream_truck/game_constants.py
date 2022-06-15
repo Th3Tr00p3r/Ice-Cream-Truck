@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from helper import ScreenProps, Vector
 
 # General
-COLORS = {"red", "deepskyblue", "lime", "yellow", "brown", "white", "mediumpurple", "pink"}
+COLORS = {"red", "deepskyblue", "lime", "gold", "brown", "white", "mediumpurple", "pink"}
 DEFAULT_FONT_SIZE = 40
 
 # Physics
@@ -43,7 +43,7 @@ PLAYER_ACCELERATION_MAGNITUDE = 0.75
 PLAYER_MOVE_SPEED = SimpleNamespace(RUN=10, SLIDE=5, JUMP=20, POUNCE=35)  # pixels per frame
 PLAYER_START_POS = Vector(100, 450)  # pixels from bottom, pixels from left
 N_JUMPS = 2
-PLAYER_COLORS = {"red", "deepskyblue", "yellow"}
+PLAYER_COLORS = {"red", "deepskyblue", "gold"}
 
 # Ice Cream Truck constants
 TRUCK_START_POS = Vector(750, 305)  # pixels from bottom, pixels from left

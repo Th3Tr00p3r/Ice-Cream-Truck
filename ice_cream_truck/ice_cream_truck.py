@@ -156,8 +156,8 @@ class PlatformerView(arcade.View):
         }
 
         # Create the player sprite
-        self.player = BlueCat(
-            #        self.player = RedCat(
+        #        self.player = BlueCat(
+        self.player = RedCat(
             #        self.player = YellowCat(
             game.PLAYER_START_POS,
             keys_pressed=self.keys_pressed,
@@ -220,6 +220,10 @@ class PlatformerView(arcade.View):
                 for i in range(game.N_JUMPS):
                     self.physics_engine.increment_jump_counter()
                 self.player.pounce()
+
+            else:  # YellowCat only
+                with suppress(AttributeError):
+                    self.player.drop()
 
         # Check if we can jump
         elif key == arcade.key.SPACE:
