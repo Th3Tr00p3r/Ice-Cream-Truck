@@ -8,6 +8,7 @@ from typing import Any, Tuple
 
 import numpy as np
 import PIL
+import PIL.ImageMorph
 
 
 class Limits:
@@ -307,3 +308,25 @@ def crop_resize_concat_horizontally(im_list, resample=PIL.Image.BOX):
         dst.paste(im, (pos_x, 0))
         pos_x += im.width
     return dst
+
+
+def get_aura_image(img, color_str):
+    """Takes an input PIL image and adds an 'aura' effect to it in chosen color"""
+
+    _, _, _, alpha_chan = img.split()
+
+    dilate_op = PIL.ImageMorph.MorphOp(op_name="dilation8")
+    _, dilated_alpha_chan = dilate_op.apply(alpha_chan)
+
+    white_aura_img = dilated_alpha_chan.convert("RGBA")
+    white_aura_img.putalpha(dilated_alpha_chan)
+
+    blue_aura_img = tint_greyscale_pixels(
+        white_aura_img,
+        color_str,
+        should_tint_black=False,
+        threshold_deviation_from_grey=10,
+        linear_beta=(0, 1),
+    )
+
+    return PIL.Image.alpha_composite(blue_aura_img, img)

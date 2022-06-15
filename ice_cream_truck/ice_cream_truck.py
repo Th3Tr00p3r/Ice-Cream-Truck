@@ -19,16 +19,14 @@ from sprites import CompetitorCat, IceCreamTruck, Player, Popsicle
 # Assets path
 ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
 
-# TODO: pounce-kill should only be allowed for blue cat
 # TODO: add sounds (getting hit, killing, competitor grabs popsicle, etc.)
 # TODO: add different cats (blue, red, yellow) with different abilities: (create a base Player class and subclasses BluePlayer etc. with different move methods but same animation etc.)
 # Blue: medium size/run/jump speed, medium health, pounce-kill-jump, superpower is only blue popsicles for a time
 # Red: small size, fast run/jump speed, low health, can air-roll (3rd jump + left/right), superpower is time-stop: many pops are thrown then everything slows down but the player, for a time
 # Yellow: big size, slow run/jump speed, high health, can drop from jump and kill with small blast radius, superpower is popsicle magnet for a time
-# TODO: aura around cat when superpower is ready
 # TODO: scroll_viewport up only!
-# TODO: IceCreamTruck - add different rates for each color, which can be augmented by a cat begging for its color
 # TODO: add additional sprites - scratching in air for pounce kill, falling on butt for yellow cat drop, 2 textures for "begging", getting hit
+# TODO: solve issue where game gets stuck on first jump/popsicle collection?
 
 
 class GameWindow(arcade.Window):
@@ -143,6 +141,7 @@ class PlatformerView(arcade.View):
             arcade.key.RIGHT: False,
             arcade.key.DOWN: False,
             arcade.key.SPACE: False,
+            arcade.key.LCTRL: False,
             "LAST": None,
         }
 
@@ -227,6 +226,15 @@ class PlatformerView(arcade.View):
                 # Play the jump sound
                 arcade.play_sound(self.jump_sound)
 
+        # Check if we can activate superpower
+        elif key == arcade.key.LCTRL:
+            self.keys_pressed[key] = True
+            self.player.update_state(
+                self.physics_engine.can_jump(), self.physics_engine.jumps_since_ground
+            )
+            if self.player.state.superpower.is_ready:
+                self.player.activate_superpower()
+
         # Did the user want to pause?
         elif key in {arcade.key.ESCAPE, arcade.key.P}:
             # Pass the current view to preserve this view's state
@@ -266,15 +274,17 @@ class PlatformerView(arcade.View):
 
         # timers
         self.game_timer += delta_time
-        if self.game_timer >= 60 and self.game_timer % 60 <= delta_time * 2:
+        if self.game_timer >= 60:
+            self.game_timer = 0.0
             self.new_cat_prob_frame *= 1.1
             if self.n_allowed_cats < 5:
                 self.n_allowed_cats += 1
 
         if self.score_multiplier_timer > 0.0:
             self.score_multiplier_timer -= delta_time
-        else:
-            self.score_multiplier = 1
+        elif self.score_multiplier > 1:
+            self.score_multiplier -= 1
+            self.score_multiplier_timer = 5
 
         # Update Popsicles
         with suppress(AttributeError):
@@ -369,10 +379,15 @@ class PlatformerView(arcade.View):
                         if popsicle.color_str == self.player.color_str
                         else popsicle.point_value
                     ) * self.score_multiplier
-                    # Play the coin sound
-                    arcade.play_sound(self.coin_sound)
-                    # mark as off-screen (for other cats)
-                    popsicle.is_off_screen = True
+                    # check for favorites towards superpower
+                    if popsicle.color_str == self.player.color_str and not (
+                        self.player.state.superpower.is_ready or self.player.state.superpower.is_on
+                    ):
+                        self.player.n_favorite_pops_collected += 1
+                # Play the coin sound
+                arcade.play_sound(self.coin_sound)
+                # mark as off-screen (for other cats)
+                popsicle.is_off_screen = True
                 # Remove the popsicle
                 popsicle.kill()
 
@@ -380,6 +395,7 @@ class PlatformerView(arcade.View):
         cats_collided_with_player = arcade.check_for_collision_with_list(
             sprite=self.player, sprite_list=self.cats
         )
+        self.ice_cream_truck.reset_throw_probabilities()
         for cat in self.cats:
             # popsicle collections
             popsicles_collided_with_cat = arcade.check_for_collision_with_list(
@@ -403,11 +419,19 @@ class PlatformerView(arcade.View):
                 else:
                     self.player.get_hit(cat)
 
+            if cat.mode == "waiting":
+                self.ice_cream_truck.color_pop_probs_dict[cat.color_str] *= 5
+
         # update poofs
         self.poofs.update_animation(delta_time)
 
         # update truck
         self.ice_cream_truck.update_animation(delta_time)
+
+        # superpower
+        if self.player.state.superpower.is_on:
+            self.ice_cream_truck.color_pop_probs_dict[self.player.color_str] *= 1000
+        self.player.update_superpower_timer(delta_time)
 
         # Set the viewport, scrolling if necessary
         self.scroll_viewport()

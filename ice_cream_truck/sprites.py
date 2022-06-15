@@ -1,14 +1,14 @@
 import math
 from collections import namedtuple
 from pathlib import Path
-from random import choice, randint, random, uniform
+from random import choice, choices, randint, random, uniform
 from types import SimpleNamespace
 
 import arcade
 import game_constants as game
 import numpy as np
 import PIL
-from helper import Limits, Vector, tint_greyscale_pixels
+from helper import Limits, Vector, get_aura_image, tint_greyscale_pixels
 
 # Assets path
 ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
@@ -434,6 +434,7 @@ class Player(BasicSprite):
     RUNNING_ANIMATION_FACTOR = 0.2
     JUMP_STOP_RATE = 0.9
     MAX_LIVES = 5
+    N_REQUIRED_FOR_SUPERPOWER = 25
     INV_TIME = 1.5  # seconds?
     texture: arcade.texture.Texture
     alpha: int
@@ -485,6 +486,10 @@ class Player(BasicSprite):
                 finishing_pounce=False,
                 recovery_timer=0,
             ),
+            superpower=SimpleNamespace(
+                is_ready=False,
+                is_on=False,
+            ),
             is_near_edge=False,
             is_in_air=False,
         )
@@ -524,8 +529,12 @@ class Player(BasicSprite):
         self.acceleration = 0.0
         self.spin_speed = 30
 
-        # for setting running animation frequency
-        self.timer = 0.0
+        # track number of self-colored popsicles collected (for superpower)
+        self.n_favorite_pops_collected = 0
+
+        # timers
+        self.timer = 0.0  # animation
+        self.superpower_timer = 0.0
 
         # poof
         self.poof_sprite = Poof(Vector(0, 0), self.color_str)
@@ -573,6 +582,11 @@ class Player(BasicSprite):
         self.state.is_in_air = self.state.jump.is_jumping or self.state.pounce.is_pouncing
 
         self._update_move_direction()
+
+        # check if superpower is ready
+        if self.n_favorite_pops_collected == self.N_REQUIRED_FOR_SUPERPOWER:
+            self.state.superpower.is_ready = True
+            self.n_favorite_pops_collected = 0  # reset
 
     def _update_move_direction(self):
         """Decide if player is moving left, moving right, or stopping, based on pressed keys"""
@@ -683,6 +697,10 @@ class Player(BasicSprite):
             self.angle = 0
             self.change_texture_and_hitbox("standing")
 
+        # add aura when superpower is ready
+        if self.state.superpower.is_ready:
+            self.add_aura_to_texture()
+
     def update_velocity(self):  # , delta_time: float):
         """Doc."""
         # TODO: attempt to seperate directions from magnitudes? (1D vector) - could make code clearer
@@ -780,6 +798,28 @@ class Player(BasicSprite):
 
         self.is_alive = False
         self.kill()
+
+    def add_aura_to_texture(self):
+        """Add an aura effect to the current texture"""
+
+        aura_img = get_aura_image(self.texture.image, self.color_str)
+        self.texture = arcade.Texture(str(aura_img), aura_img)
+
+    def update_superpower_timer(self, delta_time):
+        """Doc."""
+
+        if self.superpower_timer > 0:
+            self.superpower_timer -= delta_time
+        else:
+            self.superpower_timer = 0.0
+            self.state.superpower.is_on = False
+
+    def activate_superpower(self):
+        """Doc."""
+
+        self.state.superpower.is_on = True
+        self.state.superpower.is_ready = False
+        self.superpower_timer = 10
 
 
 class Popsicle(BasicSprite):
@@ -955,10 +995,21 @@ class IceCreamTruck(BasicSprite):
         self.animation_timer = 0.0
         self.shaking_timer = 0.0
 
+        # initiate throw probabilities
+        self.reset_throw_probabilities()
+
+    def reset_throw_probabilities(self):
+        """Doc."""
+
+        self.color_pop_probs_dict = {
+            pop_color: self.throw_probability_frame for pop_color in list(game.COLORS)
+        }
+        self.heart_pop_prob = self.throw_probability_frame * 0.001
+
     def throw_popsicle(self):
         """Throw a random (color, angle) popsicle."""
 
-        if random() < self.throw_probability_frame * 0.005:
+        if random() < self.heart_pop_prob:
             self.shaking_timer = self.SHAKE_PAUSE  # stop shaking
             return HeartPopsicle(
                 Vector(self.center_x, self.center_y),
@@ -967,9 +1018,13 @@ class IceCreamTruck(BasicSprite):
             )
 
         elif random() < self.throw_probability_frame:
+            color_str = choices(
+                list(self.color_pop_probs_dict.keys()),
+                weights=list(self.color_pop_probs_dict.values()),
+            )[0]
             self.shaking_timer = self.SHAKE_PAUSE  # stop shaking
             return RegularPopsicle(
-                choice(list(game.COLORS)),
+                color_str,
                 Vector(self.center_x, self.center_y),
                 game.PLAYER_MOVE_SPEED.RUN * uniform(0.25, 1),
                 randint(45, 135),
