@@ -310,16 +310,17 @@ def crop_resize_concat_horizontally(im_list, resample=PIL.Image.BOX):
     return dst
 
 
-def get_aura_image(img, color_str):
+def get_aura_image(img, color_str, thickness=3):
     """Takes an input PIL image and adds an 'aura' effect to it in chosen color"""
 
     _, _, _, alpha_chan = img.split()
 
     dilate_op = PIL.ImageMorph.MorphOp(op_name="dilation8")
-    _, dilated_alpha_chan = dilate_op.apply(alpha_chan)
+    for _ in range(thickness):
+        _, alpha_chan = dilate_op.apply(alpha_chan)
 
-    white_aura_img = dilated_alpha_chan.convert("RGBA")
-    white_aura_img.putalpha(dilated_alpha_chan)
+    white_aura_img = alpha_chan.convert("RGBA")
+    white_aura_img.putalpha(alpha_chan)
 
     blue_aura_img = tint_greyscale_pixels(
         white_aura_img,

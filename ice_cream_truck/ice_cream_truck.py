@@ -14,16 +14,26 @@ import game_constants as game
 import PIL
 from helper import Vector, crop_resize_concat_horizontally
 from pyglet.gl.lib import GLException
-from sprites import CompetitorCat, IceCreamTruck, Player, Popsicle
+from sprites import (
+    BlueCat,
+    CompetitorCat,
+    IceCreamTruck,
+    PlayerCat,
+    Popsicle,
+    RedCat,
+    YellowCat,
+)
 
 # Assets path
 ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
 
-# TODO: add sounds (getting hit, killing, competitor grabs popsicle, etc.)
-# TODO: add different cats (blue, red, yellow) with different abilities: (create a base Player class and subclasses BluePlayer etc. with different move methods but same animation etc.)
+
+# TODO: add different cats (blue, red, yellow) with different abilities: (create a base PlayerCat class and subclasses BluePlayer etc. with different move methods but same animation etc.)
 # Blue: medium size/run/jump speed, medium health, pounce-kill-jump, superpower is only blue popsicles for a time
 # Red: small size, fast run/jump speed, low health, can air-roll (3rd jump + left/right), superpower is time-stop: many pops are thrown then everything slows down but the player, for a time
 # Yellow: big size, slow run/jump speed, high health, can drop from jump and kill with small blast radius, superpower is popsicle magnet for a time
+
+# TODO: add sounds (getting hit, killing, competitor grabs popsicle, etc.)
 # TODO: scroll_viewport up only!
 # TODO: add additional sprites - scratching in air for pounce kill, falling on butt for yellow cat drop, 2 textures for "begging", getting hit
 # TODO: solve issue where game gets stuck on first jump/popsicle collection?
@@ -66,7 +76,7 @@ class PlatformerView(arcade.View):
         self.ice_cream_truck: IceCreamTruck = None
 
         # One sprite for the player, no more is needed
-        self.player: Player = None
+        self.player: PlayerCat = None
         self.MAX_PLAYER_LIVES = 5
 
         # We need a physics engine as well
@@ -146,14 +156,11 @@ class PlatformerView(arcade.View):
         }
 
         # Create the player sprite
-        self.player = Player(
+        self.player = BlueCat(
+            #        self.player = RedCat(
+            #        self.player = YellowCat(
             game.PLAYER_START_POS,
-            game.PLAYER_MOVE_SPEED,
-            game.PLAYER_ACCELERATION_MAGNITUDE,
-            "deepskyblue",
-            map_width=self.map_width,
             keys_pressed=self.keys_pressed,
-            scale=game.CHARACTER_SCALING,
         )
 
         # cat competitors
@@ -408,8 +415,6 @@ class PlatformerView(arcade.View):
 
             if cat in cats_collided_with_player:
                 if self.player.can_kill_cat(cat):
-                    self.player.change_y = 0
-                    self.player.jump(factor=2)
                     with suppress(ValueError):
                         self.poofs.append(cat.poof())
                     cat.kill()

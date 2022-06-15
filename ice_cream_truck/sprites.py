@@ -427,7 +427,7 @@ class CompetitorCat(BasicSprite):
         return poof
 
 
-class Player(BasicSprite):
+class PlayerCat(BasicSprite):
     """Doc."""
 
     MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "cat"
@@ -435,18 +435,23 @@ class Player(BasicSprite):
     JUMP_STOP_RATE = 0.9
     MAX_LIVES = 5
     N_REQUIRED_FOR_SUPERPOWER = 25
-    INV_TIME = 1.5  # seconds?
+    INV_TIME = 1.5
     texture: arcade.texture.Texture
     alpha: int
+
+    color_textures_dict = {
+        color_str: ColorCatTextures(color_str) for color_str in game.PLAYER_COLORS
+    }
+    poof_dict = {color_str: Poof(Vector(0, 0), color_str) for color_str in game.PLAYER_COLORS}
 
     def __init__(
         self,
         init_position: Vector,
+        keys_pressed,
         speeds: SimpleNamespace,
         acceleration_magnitude: float,
         color_str: str,
-        map_width,
-        keys_pressed,
+        lives=3,
         **kwargs,
     ):
 
@@ -459,14 +464,14 @@ class Player(BasicSprite):
 
         # initial lives
         self.is_alive = True
-        self.lives = self.MAX_LIVES - 2
+        self.lives = lives
         self.hit_timer = 0.0
 
         # get default/initial hitbox
         self.init_hitbox = self.texture.hit_box_points
 
         # hold map width
-        self.map_width = map_width
+        self.map_width = game.SCREEN_PROPS.width
 
         # hold pressed keys
         self.keys_pressed = keys_pressed
@@ -502,18 +507,7 @@ class Player(BasicSprite):
 
         # Load textures
         self.color_str = color_str
-        self.loaded_textures = SimpleNamespace(
-            standing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStanding.png", color_str),
-            running=[
-                self.load_texture_pair(self.MAIN_TEXTURE_PATH / f"catRunning{i}.png", color_str)
-                for i in (1, 2, 3, 4)
-            ],
-            pouncing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning4.png", color_str),
-            sliding=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning1.png", color_str),
-            jumping=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catJumping.png", color_str),
-            stalling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStalling.png", color_str),
-            falling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catFalling.png", color_str),
-        )
+        self.loaded_textures = self.color_textures_dict[color_str].textures
         self.hitboxes = SimpleNamespace(
             **{
                 name: (
@@ -537,7 +531,7 @@ class Player(BasicSprite):
         self.superpower_timer = 0.0
 
         # poof
-        self.poof_sprite = Poof(Vector(0, 0), self.color_str)
+        self.poof_sprite = self.poof_dict[color_str]
 
     def update_state(self, can_jump, n_jumps_since_ground, **kwargs):
         """Doc."""
@@ -764,13 +758,19 @@ class Player(BasicSprite):
     def can_kill_cat(self, cat) -> bool:
         """Doc."""
 
-        return (
+        did_kill = (
             self.change_y < 0
             and self.center_y > cat.center_y - cat.height * 1 / 3
             and abs(self.center_x - cat.center_x) < cat.width / 3
             and self.hit_timer <= self.INV_TIME * 0.9
             and not (self.state.pounce.is_pouncing or self.state.pounce.finishing_pounce)
         )
+
+        if did_kill:
+            self.change_y = 0
+            self.jump(factor=2)
+
+        return did_kill
 
     def get_hit(self, cat):
         """Doc."""
@@ -820,6 +820,90 @@ class Player(BasicSprite):
         self.state.superpower.is_on = True
         self.state.superpower.is_ready = False
         self.superpower_timer = 10
+
+
+class BlueCat(PlayerCat):
+    """Doc."""
+
+    def __init__(
+        self,
+        *args,
+        **kwargs,
+    ):
+
+        super().__init__(
+            *args,
+            speeds=SimpleNamespace(RUN=10, SLIDE=5, JUMP=20, POUNCE=35),
+            acceleration_magnitude=0.75,
+            color_str="deepskyblue",
+            scale=game.CHARACTER_SCALING,
+            lives=3,
+            **kwargs,
+        )
+
+    def can_kill_cat(self, cat) -> bool:
+        """Doc."""
+
+        if self.state.pounce.is_pouncing or self.state.pounce.finishing_pounce:
+            self.state.pounce.is_pouncing = False
+            self.change_x *= 2
+            self.jump(factor=2)
+            return True
+
+        else:
+            did_kill = (
+                self.change_y < 0
+                and self.center_y > cat.center_y - cat.height * 1 / 3
+                and abs(self.center_x - cat.center_x) < cat.width / 3
+                and self.hit_timer <= self.INV_TIME * 0.9
+                and not (self.state.pounce.is_pouncing or self.state.pounce.finishing_pounce)
+            )
+
+            if did_kill:
+                self.change_y = 0
+                self.jump(factor=2)
+
+            return did_kill
+
+
+class RedCat(PlayerCat):
+    """Doc."""
+
+    def __init__(
+        self,
+        *args,
+        **kwargs,
+    ):
+
+        super().__init__(
+            *args,
+            speeds=SimpleNamespace(RUN=12, SLIDE=6, JUMP=24, POUNCE=42),
+            acceleration_magnitude=1.08,
+            color_str="red",
+            scale=game.CHARACTER_SCALING * 0.8,
+            lives=2,
+            **kwargs,
+        )
+
+
+class YellowCat(PlayerCat):
+    """Doc."""
+
+    def __init__(
+        self,
+        *args,
+        **kwargs,
+    ):
+
+        super().__init__(
+            *args,
+            speeds=SimpleNamespace(RUN=8, SLIDE=4, JUMP=19.2, POUNCE=28),
+            acceleration_magnitude=0.48,
+            color_str="yellow",
+            scale=game.CHARACTER_SCALING * 1.2,
+            lives=4,
+            **kwargs,
+        )
 
 
 class Popsicle(BasicSprite):

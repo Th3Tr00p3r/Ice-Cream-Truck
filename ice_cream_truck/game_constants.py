@@ -38,8 +38,8 @@ LEFT = -1
 RIGHT = 1
 STOP = 0
 
-# Player constants
-PLAYER_ACCELERATION_MAGNITUDE = 0.75  # TESTESTEST
+# PlayerCat constants
+PLAYER_ACCELERATION_MAGNITUDE = 0.75
 PLAYER_MOVE_SPEED = SimpleNamespace(RUN=10, SLIDE=5, JUMP=20, POUNCE=35)  # pixels per frame
 PLAYER_START_POS = Vector(100, 450)  # pixels from bottom, pixels from left
 N_JUMPS = 2
