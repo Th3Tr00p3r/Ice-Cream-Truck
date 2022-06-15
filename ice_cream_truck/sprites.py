@@ -748,9 +748,10 @@ class Player(BasicSprite):
 
         return (
             self.change_y < 0
-            and self.center_y > cat.center_y * 0.5
+            and self.center_y > cat.center_y - cat.height * 1 / 3
             and abs(self.center_x - cat.center_x) < cat.width / 3
             and self.hit_timer <= self.INV_TIME * 0.9
+            and not (self.state.pounce.is_pouncing or self.state.pounce.finishing_pounce)
         )
 
     def get_hit(self, cat):

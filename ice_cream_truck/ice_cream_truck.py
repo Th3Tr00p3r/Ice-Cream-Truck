@@ -27,7 +27,6 @@ ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
 # Yellow: big size, slow run/jump speed, high health, can drop from jump and kill with small blast radius, superpower is popsicle magnet for a time
 # TODO: aura around cat when superpower is ready
 # TODO: scroll_viewport up only!
-# TODO: add animation effect for ice cream truck - shake while no popsicles are thrown (looking for popsicles...)
 # TODO: IceCreamTruck - add different rates for each color, which can be augmented by a cat begging for its color
 # TODO: add additional sprites - scratching in air for pounce kill, falling on butt for yellow cat drop, 2 textures for "begging", getting hit
 
@@ -393,7 +392,8 @@ class PlatformerView(arcade.View):
 
             if cat in cats_collided_with_player:
                 if self.player.can_kill_cat(cat):
-                    self.player.jump(factor=3)
+                    self.player.change_y = 0
+                    self.player.jump(factor=2)
                     with suppress(ValueError):
                         self.poofs.append(cat.poof())
                     cat.kill()
