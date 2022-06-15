@@ -336,7 +336,7 @@ class PlatformerView(arcade.View):
                         RUN=10 / 3, SLIDE=5 / 3, JUMP=20 / 3, POUNCE=35 / 3
                     ),  # pixels per frame
                     acceleration_magnitude=50 / 3,
-                    color_str=choice(list(game.COLORS - {self.player.color_str})),
+                    color_str=choice(list(game.COLORS - game.PLAYER_COLORS)),
                     game_view=self,
                     scale=game.CHARACTER_SCALING * uniform(1, 1.5),
                 )
@@ -571,6 +571,9 @@ class TitleView(arcade.View):
             align="center",
         )
 
+        self.game_view = PlatformerView()
+        self.game_view.setup()
+
     def on_update(self, delta_time: float) -> None:
         """Manages the timer to toggle the instructions
 
@@ -612,9 +615,7 @@ class TitleView(arcade.View):
             modifiers -- What modifiers were active
         """
         if not modifiers & arcade.key.MOD_ALT and key == arcade.key.RETURN:
-            game_view = PlatformerView()
-            game_view.setup()
-            self.window.show_view(game_view)
+            self.window.show_view(self.game_view)
         elif key == arcade.key.I:
             instructions_view = InstructionsView()
             self.window.show_view(instructions_view)

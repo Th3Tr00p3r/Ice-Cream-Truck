@@ -14,38 +14,8 @@ from helper import Limits, Vector, tint_greyscale_pixels
 ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
 
 
-class AnimatedTexture:
-    """Doc."""
-
-    # TODO: what are the units of rate?
-
-    def __init__(self, image_list, rate, should_loop=False):
-
-        self.image_iter = iter(image_list)
-        self.rate = rate
-        self.should_loop = should_loop
-        self.n_imgs = len(image_list)
-        self.timer = 0.0
-        self.img_idx = 0
-
-    def next(self, delta_time: float):
-        """Doc."""
-
-        if self.timer * self.rate >= 1:
-            self.img_idx += 1
-        self.timer += delta_time
-        return self.image_iter[self.img_idx]
-
-
-class BasicSprite(arcade.Sprite):
-
-    texture: arcade.Texture
-
-    def __init__(self, init_position: Vector, **kwargs):
-        init_x, init_y = init_position
-        super().__init__(center_x=init_x, center_y=init_y, **kwargs)
-
-        self.is_off_screen = False
+class SpriteMixin:
+    """Useful methods for sprites"""
 
     def load_texture(self, filename, color_tint: str = None, **kwargs):
         """
@@ -102,10 +72,79 @@ class BasicSprite(arcade.Sprite):
             else:
                 self.bottom = 0
 
-    def tint_texture(self, texture: PIL.Image, color: str, **kwargs):
+
+class AnimatedTexture:
+    """Doc."""
+
+    # TODO: what are the units of rate?
+
+    def __init__(self, image_list, rate, should_loop=False):
+
+        self.image_iter = iter(image_list)
+        self.rate = rate
+        self.should_loop = should_loop
+        self.n_imgs = len(image_list)
+        self.timer = 0.0
+        self.img_idx = 0
+
+    def next(self, delta_time: float):
         """Doc."""
 
-        self.texture = tint_greyscale_pixels(self.texture, color, **kwargs)
+        if self.timer * self.rate >= 1:
+            self.img_idx += 1
+        self.timer += delta_time
+        return self.image_iter[self.img_idx]
+
+
+class ColorCatTextures(SpriteMixin):
+    """Doc."""
+
+    MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "cat"
+
+    def __init__(self, color_str):
+        self.color_str = color_str
+        self.textures = self.get_textures()
+
+    def get_textures(self):
+        """Return a namespace with colored cat textures"""
+
+        return SimpleNamespace(
+            standing=self.load_texture_pair(
+                self.MAIN_TEXTURE_PATH / "catStanding.png", self.color_str
+            ),
+            running=[
+                self.load_texture_pair(
+                    self.MAIN_TEXTURE_PATH / f"catRunning{i}.png", self.color_str
+                )
+                for i in (1, 2, 3, 4)
+            ],
+            pouncing=self.load_texture_pair(
+                self.MAIN_TEXTURE_PATH / "catRunning4.png", self.color_str
+            ),
+            sliding=self.load_texture_pair(
+                self.MAIN_TEXTURE_PATH / "catRunning1.png", self.color_str
+            ),
+            jumping=self.load_texture_pair(
+                self.MAIN_TEXTURE_PATH / "catJumping.png", self.color_str
+            ),
+            stalling=self.load_texture_pair(
+                self.MAIN_TEXTURE_PATH / "catStalling.png", self.color_str
+            ),
+            falling=self.load_texture_pair(
+                self.MAIN_TEXTURE_PATH / "catFalling.png", self.color_str
+            ),
+        )
+
+
+class BasicSprite(arcade.Sprite, SpriteMixin):
+
+    texture: arcade.Texture
+
+    def __init__(self, init_position: Vector, **kwargs):
+        init_x, init_y = init_position
+        super().__init__(center_x=init_x, center_y=init_y, **kwargs)
+
+        self.is_off_screen = False
 
 
 class Poof(BasicSprite):
@@ -159,14 +198,18 @@ class Poof(BasicSprite):
 class CompetitorCat(BasicSprite):
     """Doc."""
 
-    MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "cat"
     RUNNING_ANIMATION_FACTOR = 0.4  # TODO: twice that of player (should be determined by speed)
     MAX_LIVES = 1
     texture: arcade.texture.Texture
     change_x: float
     change_y: float
     center_y: float
-    poof_dict = {color_str: Poof(Vector(0, 0), color_str) for color_str in game.COLORS}
+    color_textures_dict = {
+        color_str: ColorCatTextures(color_str) for color_str in game.COLORS - game.PLAYER_COLORS
+    }
+    poof_dict = {
+        color_str: Poof(Vector(0, 0), color_str) for color_str in game.COLORS - game.PLAYER_COLORS
+    }
 
     def __init__(
         self,
@@ -181,7 +224,7 @@ class CompetitorCat(BasicSprite):
 
         super().__init__(
             init_position,
-            filename=self.MAIN_TEXTURE_PATH / "catStanding.png",
+            filename=ASSETS_PATH / "images" / "cat" / "catStanding.png",
             hit_box_algorithm="Detailed",
             scale=scale,
             **kwargs,
@@ -227,18 +270,7 @@ class CompetitorCat(BasicSprite):
 
         # Load textures
         self.color_str = color_str
-        self.loaded_textures = SimpleNamespace(
-            standing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStanding.png", color_str),
-            running=[
-                self.load_texture_pair(self.MAIN_TEXTURE_PATH / f"catRunning{i}.png", color_str)
-                for i in (1, 2, 3, 4)
-            ],
-            pouncing=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning4.png", color_str),
-            sliding=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catRunning1.png", color_str),
-            jumping=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catJumping.png", color_str),
-            stalling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catStalling.png", color_str),
-            falling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "catFalling.png", color_str),
-        )
+        self.loaded_textures = self.color_textures_dict[color_str].textures
         self.hitboxes = SimpleNamespace(
             **{
                 name: (
