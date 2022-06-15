@@ -26,7 +26,6 @@ ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
 # Red: small size, fast run/jump speed, low health, can air-roll (3rd jump + left/right), superpower is time-stop: many pops are thrown then everything slows down but the player, for a time
 # Yellow: big size, slow run/jump speed, high health, can drop from jump and kill with small blast radius, superpower is popsicle magnet for a time
 # TODO: aura around cat when superpower is ready
-# TODO: add score multiplier for 10 seconds after killing a cat. Timer is reset and multiplier increased by 1 for each consecutive cat killed
 # TODO: scroll_viewport up only!
 # TODO: add animation effect for ice cream truck - shake while no popsicles are thrown (looking for popsicles...)
 # TODO: IceCreamTruck - add different rates for each color, which can be augmented by a cat begging for its color
@@ -406,6 +405,9 @@ class PlatformerView(arcade.View):
 
         # update poofs
         self.poofs.update_animation(delta_time)
+
+        # update truck
+        self.ice_cream_truck.update_animation(delta_time)
 
         # Set the viewport, scrolling if necessary
         self.scroll_viewport()

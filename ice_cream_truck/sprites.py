@@ -893,6 +893,9 @@ class IceCreamTruck(BasicSprite):
     """Doc."""
 
     MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "enemies"
+    ANIMATION_RATE = 10
+    SHAKE_PAUSE = 1
+    angle: float
 
     def __init__(self, init_position: Vector, throw_probability_frame: float, **kwargs):
         super().__init__(
@@ -915,10 +918,15 @@ class IceCreamTruck(BasicSprite):
 
         self.throw_probability_frame = throw_probability_frame
 
+        # timers
+        self.animation_timer = 0.0
+        self.shaking_timer = 0.0
+
     def throw_popsicle(self):
         """Throw a random (color, angle) popsicle."""
 
         if random() < self.throw_probability_frame * 0.005:
+            self.shaking_timer = self.SHAKE_PAUSE  # stop shaking
             return HeartPopsicle(
                 Vector(self.center_x, self.center_y),
                 game.PLAYER_MOVE_SPEED.RUN * uniform(0.75, 1.15),
@@ -926,9 +934,22 @@ class IceCreamTruck(BasicSprite):
             )
 
         elif random() < self.throw_probability_frame:
+            self.shaking_timer = self.SHAKE_PAUSE  # stop shaking
             return RegularPopsicle(
                 choice(list(game.COLORS)),
                 Vector(self.center_x, self.center_y),
                 game.PLAYER_MOVE_SPEED.RUN * uniform(0.25, 1),
                 randint(45, 135),
             )
+
+    def update_animation(self, delta_time: float):
+        """Doc."""
+
+        self.shaking_timer -= delta_time
+        if self.shaking_timer <= 0:
+            self.animation_timer += delta_time
+            if self.animation_timer * self.ANIMATION_RATE > 1:
+                self.angle = -math.copysign(1, self.angle) * uniform(0.5, 3)
+                self.animation_timer = 0.0
+        else:
+            self.angle = 0.0
