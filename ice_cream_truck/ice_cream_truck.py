@@ -7,6 +7,7 @@ from contextlib import suppress
 from pathlib import Path
 from random import choice, random, uniform
 from types import SimpleNamespace
+from typing import Dict, Union
 
 import arcade
 import game_constants as game
@@ -18,7 +19,6 @@ from sprites import CompetitorCat, IceCreamTruck, Player, Popsicle
 # Assets path
 ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
 
-# TODO: add different behaviours for different-colored cats (wander, jump around, sleep, run  side to side)
 # TODO: pounce-kill should only be allowed for blue cat
 # TODO: add sounds (getting hit, killing, competitor grabs popsicle, etc.)
 # TODO: add different cats (blue, red, yellow) with different abilities: (create a base Player class and subclasses BluePlayer etc. with different move methods but same animation etc.)
@@ -29,6 +29,8 @@ ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
 # TODO: add score multiplier for 10 seconds after killing a cat. Timer is reset and multiplier increased by 1 for each consecutive cat killed
 # TODO: scroll_viewport up only!
 # TODO: add animation effect for ice cream truck - shake while no popsicles are thrown (looking for popsicles...)
+# TODO: IceCreamTruck - add different rates for each color, which can be augmented by a cat begging for its color
+# TODO: add additional sprites - scratching in air for pounce kill, falling on butt for yellow cat drop, 2 textures for "begging", getting hit
 
 
 class GameWindow(arcade.Window):
@@ -75,12 +77,15 @@ class PlatformerView(arcade.View):
         self.physics_engine: arcade.PhysicsEnginePlatformer = None
 
         # Someplace to keep score
-        self.score = 0
+        self.score: int
         self.last_drawn_score: int = None
-        self.digit_dict = {
+        self.last_drawn_score_multiplier: int = None
+        self.digit_dict: Dict[Union[int, str], PIL.Image] = {
             idx: PIL.Image.open(img_path)
             for idx, img_path in enumerate((ASSETS_PATH / "images" / "HUD" / "score").glob("*.png"))
         }
+        self.digit_dict["x"] = PIL.Image.open(ASSETS_PATH / "images" / "HUD" / "hudX.png")
+        self.score_multiplier: int
 
         # lives
         self.empty_heart_image = PIL.Image.open(
@@ -182,10 +187,12 @@ class PlatformerView(arcade.View):
 
         # reset score
         self.score = 0
+        self.score_multiplier = 1
 
         # timers
         self.game_timer = 0.0
         self.game_over_timer = 0.0
+        self.score_multiplier_timer = 0.0
 
     def on_key_press(self, key, modifiers):
         """Called whenever a key is pressed."""
@@ -259,12 +266,17 @@ class PlatformerView(arcade.View):
         elif not self.player.is_alive:
             self.window.show_view(GameOverView(self))
 
-        # timer
+        # timers
         self.game_timer += delta_time
         if self.game_timer >= 60 and self.game_timer % 60 <= delta_time * 2:
             self.new_cat_prob_frame *= 1.1
             if self.n_allowed_cats < 5:
                 self.n_allowed_cats += 1
+
+        if self.score_multiplier_timer > 0.0:
+            self.score_multiplier_timer -= delta_time
+        else:
+            self.score_multiplier = 1
 
         # Update Popsicles
         with suppress(AttributeError):
@@ -349,7 +361,7 @@ class PlatformerView(arcade.View):
                     if self.player.lives < self.player.MAX_LIVES:
                         self.player.lives += 1
                     else:
-                        self.score += popsicle.point_value
+                        self.score += popsicle.point_value * self.score_multiplier
                     # Play the coin sound
                     arcade.play_sound(self.coin_sound)
                 else:  # regular
@@ -358,7 +370,7 @@ class PlatformerView(arcade.View):
                         popsicle.point_value * 5
                         if popsicle.color_str == self.player.color_str
                         else popsicle.point_value
-                    )
+                    ) * self.score_multiplier
                     # Play the coin sound
                     arcade.play_sound(self.coin_sound)
                     # mark as off-screen (for other cats)
@@ -387,6 +399,8 @@ class PlatformerView(arcade.View):
                         self.poofs.append(cat.poof())
                     cat.kill()
                     self.n_cats -= 1
+                    self.score_multiplier += 1
+                    self.score_multiplier_timer = 5.0
                 else:
                     self.player.get_hit(cat)
 
@@ -460,16 +474,15 @@ class PlatformerView(arcade.View):
 
         # Draw the score in the upper left
         if self.score != self.last_drawn_score:
-            new_score_image = self.get_score_image(self.score)
-            self.score_image = arcade.Texture(str(self.score), new_score_image)
+            self.new_score_image = self.get_score_image(self.score)
             self.last_drawn_score = self.score
 
         arcade.draw_texture_rectangle(
-            100 + self.view_left,
-            self.view_bottom + game.SCREEN_PROPS.height - 50,
+            self.view_left + 120,
+            self.view_bottom + game.SCREEN_PROPS.height - 75,
             150,
             75,
-            self.score_image,
+            arcade.Texture(str(self.score), self.new_score_image),
         )
 
         # Draw lives HUD in the upper right
@@ -479,11 +492,24 @@ class PlatformerView(arcade.View):
             self.last_drawn_lives = self.player.lives
 
         arcade.draw_texture_rectangle(
-            self.view_left + game.SCREEN_PROPS.width - 100,
+            self.view_left + game.SCREEN_PROPS.width - 150,
             self.view_bottom + game.SCREEN_PROPS.height - 50,
-            150,
+            200,
             50,
             self.lives_image,
+        )
+
+        # Draw the score multiplier below the lives HUD
+        if self.score_multiplier != self.last_drawn_score_multiplier:
+            self.new_score_multiplier_image = self.get_score_multiplier_image(self.score_multiplier)
+            self.last_drawn_score_multiplier = self.score_multiplier
+
+        arcade.draw_texture_rectangle(
+            self.view_left + game.SCREEN_PROPS.width - 105,
+            self.view_bottom + game.SCREEN_PROPS.height - 120,
+            112.5,
+            56.25,
+            arcade.Texture(str(self.new_score_multiplier_image), self.new_score_multiplier_image),
         )
 
     def get_score_image(self, score: int):
@@ -493,6 +519,12 @@ class PlatformerView(arcade.View):
         """
 
         img_list = [self.digit_dict[int(digit_char)] for digit_char in str(score)]
+        return crop_resize_concat_horizontally(img_list)
+
+    def get_score_multiplier_image(self, multiplier: int):
+        """Doc."""
+
+        img_list = [self.digit_dict["x"], self.digit_dict[multiplier]]
         return crop_resize_concat_horizontally(img_list)
 
     def get_lives_hud(self, n_max_lives: int, n_lives_left: int):

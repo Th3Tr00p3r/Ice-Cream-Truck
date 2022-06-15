@@ -716,7 +716,7 @@ class Player(BasicSprite):
 
         return (
             self.change_y < 0
-            and self.center_y > cat.center_y
+            and self.center_y > cat.center_y * 0.5
             and abs(self.center_x - cat.center_x) < cat.width / 3
             and self.hit_timer <= self.INV_TIME * 0.9
         )
