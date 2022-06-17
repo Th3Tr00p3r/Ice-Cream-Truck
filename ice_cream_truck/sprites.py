@@ -457,6 +457,7 @@ class PlayerCat(BasicSprite):
         aura_color_str: str,
         lives=3,
         state=None,
+        ground_height: float = None,
         **kwargs,
     ):
 
@@ -466,6 +467,8 @@ class PlayerCat(BasicSprite):
             hit_box_algorithm="Detailed",
             **kwargs,
         )
+
+        self.ground_height = ground_height
 
         # initial lives
         self.is_alive = True
@@ -975,7 +978,8 @@ class YellowCat(PlayerCat):
     def drop(self):
         """Doc."""
 
-        if self.state.is_in_air:
+        above_ground_height = self.center_y - self.ground_height
+        if self.state.is_in_air and above_ground_height > self.height * 2.5:
             self.state.drop.is_dropping = True
             self.change_x = 0.0
             self.change_y = -self.speeds.JUMP
@@ -1149,9 +1153,10 @@ class IceCreamTruck(BasicSprite):
     MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "enemies"
     ANIMATION_RATE = 10
     SHAKE_PAUSE = 1
+    THROW_PROBABILITY = 0.03
     angle: float
 
-    def __init__(self, init_position: Vector, throw_probability_frame: float, **kwargs):
+    def __init__(self, init_position: Vector, **kwargs):
         super().__init__(
             init_position, filename=self.MAIN_TEXTURE_PATH / "truckIceCream1.png", **kwargs
         )
@@ -1170,7 +1175,7 @@ class IceCreamTruck(BasicSprite):
         # Set the initial texture
         self.texture = self.loaded_textures.standing.RIGHT
 
-        self.throw_probability_frame = throw_probability_frame
+        self.throw_probability_frame = self.THROW_PROBABILITY
 
         # timers
         self.animation_timer = 0.0
@@ -1182,10 +1187,11 @@ class IceCreamTruck(BasicSprite):
     def reset_throw_probabilities(self):
         """Doc."""
 
+        self.throw_probability_frame = self.THROW_PROBABILITY
         self.color_pop_probs_dict = {
             pop_color: self.throw_probability_frame for pop_color in list(game.COLORS)
         }
-        self.heart_pop_prob = self.throw_probability_frame * 0.001
+        self.heart_pop_prob = self.throw_probability_frame * 0.005
 
     def throw_popsicle(self):
         """Throw a random (color, angle) popsicle."""
