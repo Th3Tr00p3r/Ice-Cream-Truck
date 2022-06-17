@@ -13,7 +13,8 @@ import arcade
 import game_constants as game
 import PIL
 from helper import Vector, crop_resize_concat_horizontally
-from pyglet.gl.lib import GLException
+
+# from pyglet.gl.lib import GLException
 from sprites import (
     BlueCat,
     CompetitorCat,
@@ -28,11 +29,12 @@ from sprites import (
 ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
 
 
-# TODO: add different cats (blue, red, yellow) with different abilities: (create a base PlayerCat class and subclasses BluePlayer etc. with different move methods but same animation etc.)
-# Blue: medium size/run/jump speed, medium health, pounce-kill-jump, superpower is only blue popsicles for a time
-# Red: small size, fast run/jump speed, low health, can air-roll (3rd jump + left/right), superpower is time-stop: many pops are thrown then everything slows down but the player, for a time
-# Yellow: big size, slow run/jump speed, high health, can drop from jump and kill with small blast radius, superpower is popsicle magnet for a time
+# TODO:
+# Red: can air-roll (3rd jump + left/right), superpower is time-stop: many pops are thrown then everything slows down but the player, for a time
+# Yellow: superpower is popsicle magnet for a time
 
+# TODO: turn on invulnerability for a few seconds when switching cats after cat dies
+# TODO: add available cat thumbnails to HUD
 # TODO: add sounds (getting hit, killing, competitor grabs popsicle, etc.)
 # TODO: scroll_viewport up only!
 # TODO: add additional sprites - scratching in air for pounce kill, falling on butt for yellow cat drop, 2 textures for "begging", getting hit
@@ -78,6 +80,11 @@ class PlatformerView(arcade.View):
         # One sprite for the player, no more is needed
         self.player: PlayerCat = None
         self.MAX_PLAYER_LIVES = 5
+        self.key_color_dict = {
+            arcade.key.B: "deepskyblue",
+            arcade.key.R: "red",
+            arcade.key.Y: "gold",
+        }
 
         # We need a physics engine as well
         self.physics_engine: arcade.PhysicsEnginePlatformer = None
@@ -156,12 +163,15 @@ class PlatformerView(arcade.View):
         }
 
         # Create the player sprite
-        #        self.player = BlueCat(
-        self.player = RedCat(
-            #        self.player = YellowCat(
-            game.PLAYER_START_POS,
-            keys_pressed=self.keys_pressed,
-        )
+        self.player_cats = {
+            cat_class.color_str: cat_class(
+                game.PLAYER_START_POS,
+                keys_pressed=self.keys_pressed,
+            )
+            for cat_class in (BlueCat, RedCat, YellowCat)
+        }
+        # always start with blue cat
+        self.player = self.player_cats["deepskyblue"]  # type: ignore
 
         # cat competitors
         self.n_allowed_cats = 1
@@ -180,14 +190,7 @@ class PlatformerView(arcade.View):
         self.view_bottom = 0
 
         # Load the physics engine for this map
-        self.physics_engine = arcade.PhysicsEnginePlatformer(
-            player_sprite=self.player,
-            platforms=self.map_sprite_lists["ground"],
-            gravity_constant=game.GRAVITY,
-        )
-
-        # multi-jumps
-        self.physics_engine.enable_multi_jump(game.N_JUMPS)
+        self.setup_physics_engine()
 
         # reset score
         self.score = 0
@@ -200,6 +203,15 @@ class PlatformerView(arcade.View):
 
     def on_key_press(self, key, modifiers):
         """Called whenever a key is pressed."""
+
+        # Switch player cat
+        if key in {arcade.key.B, arcade.key.R, arcade.key.Y}:
+            color_str = self.key_color_dict[key]
+            # if switching to new cat
+            if (
+                req_cat := self.player_cats.get(color_str)
+            ) is not None and not self.player == req_cat:
+                self.switch_player_cat(color_str)
 
         # Check for player left/right movement
         if key in (arcade.key.LEFT, arcade.key.RIGHT):
@@ -273,9 +285,14 @@ class PlatformerView(arcade.View):
         # check if player is out of lives, and begin death animation
         if not self.player.lives and self.game_over_timer == 0.0:
             self.player.die()
+            self.player_cats.pop(self.player.color_str)
             self.poofs.append(self.player.poof())
-            # TODO: play game over sound
-            self.game_over_timer = 3.0
+            # choose random cat remaining in player_cats
+            if self.player_cats:
+                self.switch_player_cat(choice(list(self.player_cats.keys())))
+            else:
+                # TODO: play game over sound
+                self.game_over_timer = 3.0
 
         # when death animation ends, game is over
         if self.game_over_timer > 0:
@@ -317,11 +334,11 @@ class PlatformerView(arcade.View):
                     popsicle.restrict_position(self.map_width, should_kill=True, no_bottom=True)
 
         # Update player movement based on the physics engine
-        with suppress(OSError, GLException):  # NOTE: error caused by unpausing?
-            self.physics_engine.update()
-            self.player.update_state(
-                self.physics_engine.can_jump(), self.physics_engine.jumps_since_ground
-            )
+        #        with suppress(OSError, GLException):  # NOTE: error caused by unpausing?
+        self.physics_engine.update()
+        self.player.update_state(
+            self.physics_engine.can_jump(), self.physics_engine.jumps_since_ground
+        )
         self.player.update_velocity()
         self.player.apply_friction()
         self.player.restrict_position(self.map_width)
@@ -570,6 +587,30 @@ class PlatformerView(arcade.View):
             [self.full_heart_image] * n_lives_left + [self.empty_heart_image] * n_lives_lost
         )
 
+    def switch_player_cat(self, color_str):
+        """Doc."""
+
+        previous_player = self.player
+        self.player = self.player_cats[color_str]
+        self.player.state = previous_player.state
+        self.player.position = previous_player.position
+        self.player.change_x = previous_player.change_x
+        self.player.change_y = previous_player.change_y
+        previous_player.position = (0, 0)  # move to safety
+        self.setup_physics_engine()
+
+    def setup_physics_engine(self):
+        """Doc."""
+
+        self.physics_engine = arcade.PhysicsEnginePlatformer(
+            player_sprite=self.player,
+            platforms=self.map_sprite_lists["ground"],
+            gravity_constant=game.GRAVITY,
+        )
+
+        # multi-jumps
+        self.physics_engine.enable_multi_jump(game.N_JUMPS)
+
 
 class TitleView(arcade.View):
     """Displays a title screen and prompts the user to begin the game.
@@ -605,7 +646,6 @@ class TitleView(arcade.View):
         )
 
         self.game_view = PlatformerView()
-        self.game_view.setup()
 
     def on_update(self, delta_time: float) -> None:
         """Manages the timer to toggle the instructions
@@ -648,7 +688,9 @@ class TitleView(arcade.View):
             modifiers -- What modifiers were active
         """
         if not modifiers & arcade.key.MOD_ALT and key == arcade.key.RETURN:
+            self.game_view.setup()
             self.window.show_view(self.game_view)
+
         elif key == arcade.key.I:
             instructions_view = InstructionsView()
             self.window.show_view(instructions_view)
@@ -805,7 +847,7 @@ class GameOverView(arcade.View):
             key -- Which key was pressed
             modifiers -- What modifiers were active
         """
-        if key == arcade.key.ENTER:
+        if key == arcade.key.RETURN:
             # Reset the current level
             self.game_view.setup()
             self.window.show_view(self.game_view)

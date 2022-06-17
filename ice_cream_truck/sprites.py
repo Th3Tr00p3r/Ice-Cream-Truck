@@ -17,6 +17,8 @@ ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
 class SpriteMixin:
     """Useful methods for sprites"""
 
+    color_str: str  # mypy complained...?
+
     def load_texture(self, filename, color_tint: str = None, **kwargs):
         """
         Load a texture pair, with the second being a mirror image.
@@ -454,6 +456,7 @@ class PlayerCat(BasicSprite):
         color_str: str,
         aura_color_str: str,
         lives=3,
+        state=None,
         **kwargs,
     ):
 
@@ -480,33 +483,36 @@ class PlayerCat(BasicSprite):
 
         # initialize state
         self.move_state = game.STOP
-        self.state = SimpleNamespace(
-            is_facing_left=int(False),
-            jump=SimpleNamespace(
-                can_jump=False,
-                is_jumping=False,
-                is_falling=False,
-            ),
-            pounce=SimpleNamespace(
-                can_pounce=False,
-                is_pouncing=False,
-                finishing_pounce=False,
-                recovery_timer=0,
-            ),
-            air_dash=SimpleNamespace(
-                can_air_dash=False,
-            ),
-            drop=SimpleNamespace(
-                can_drop=False,
-                is_dropping=False,
-            ),
-            superpower=SimpleNamespace(
-                is_ready=False,
-                is_on=False,
-            ),
-            is_near_edge=False,
-            is_in_air=False,
-        )
+        if state is None:
+            self.state = SimpleNamespace(
+                is_facing_left=int(False),
+                jump=SimpleNamespace(
+                    can_jump=False,
+                    is_jumping=False,
+                    is_falling=False,
+                ),
+                pounce=SimpleNamespace(
+                    can_pounce=False,
+                    is_pouncing=False,
+                    finishing_pounce=False,
+                    recovery_timer=0,
+                ),
+                air_dash=SimpleNamespace(
+                    can_air_dash=False,
+                ),
+                drop=SimpleNamespace(
+                    can_drop=False,
+                    is_dropping=False,
+                ),
+                superpower=SimpleNamespace(
+                    is_ready=False,
+                    is_on=False,
+                ),
+                is_near_edge=False,
+                is_in_air=False,
+            )
+        else:
+            self.state = state
 
         # Default to face-right
         self.face_direction = game.FACE_RIGHT
@@ -844,6 +850,8 @@ class PlayerCat(BasicSprite):
 class BlueCat(PlayerCat):
     """Doc."""
 
+    color_str = "deepskyblue"
+
     def __init__(
         self,
         *args,
@@ -854,7 +862,7 @@ class BlueCat(PlayerCat):
             *args,
             speeds=SimpleNamespace(RUN=10, SLIDE=5, JUMP=20, POUNCE=35),
             acceleration_magnitude=0.75,
-            color_str="deepskyblue",
+            color_str=self.color_str,
             aura_color_str="skyblue",
             scale=game.CHARACTER_SCALING,
             lives=3,
@@ -892,6 +900,8 @@ class RedCat(PlayerCat):
     RUNNING_ANIMATION_FACTOR = 0.16
     POUNCE_RECOV = 40  # TODO: units?..
 
+    color_str = "red"
+
     def __init__(
         self,
         *args,
@@ -902,7 +912,7 @@ class RedCat(PlayerCat):
             *args,
             speeds=SimpleNamespace(RUN=12, SLIDE=6, JUMP=24, POUNCE=42),
             acceleration_magnitude=1.08,
-            color_str="red",
+            color_str=self.color_str,
             aura_color_str="palevioletred",
             scale=game.CHARACTER_SCALING * 0.9,
             lives=2,
@@ -941,6 +951,8 @@ class YellowCat(PlayerCat):
     RUNNING_ANIMATION_FACTOR = 0.24
     POUNCE_RECOV = 60  # TODO: units?..
 
+    color_str = "gold"
+
     def __init__(
         self,
         *args,
@@ -951,7 +963,7 @@ class YellowCat(PlayerCat):
             *args,
             speeds=SimpleNamespace(RUN=8, SLIDE=4, JUMP=19.2, POUNCE=28),
             acceleration_magnitude=0.48,
-            color_str="gold",
+            color_str=self.color_str,
             aura_color_str="yellow",
             scale=game.CHARACTER_SCALING * 1.1,
             lives=4,
@@ -984,9 +996,9 @@ class YellowCat(PlayerCat):
                 and not (self.state.pounce.is_pouncing or self.state.pounce.finishing_pounce)
             )
 
-        if did_kill:
-            self.change_y = 0
-            self.jump(factor=2)
+            if did_kill:
+                self.change_y = 0
+                self.jump(factor=2)
 
         return did_kill
 
