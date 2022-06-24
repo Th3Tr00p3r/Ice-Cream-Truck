@@ -110,7 +110,6 @@ class PlatformerView(arcade.View):
 
         # Load up our sounds here
         self.coin_sound = arcade.load_sound(str(ASSETS_PATH / "sounds" / "coin.wav"))
-        self.jump_sound = arcade.load_sound(str(ASSETS_PATH / "sounds" / "jump.wav"))
         self.victory_sound = arcade.load_sound(str(ASSETS_PATH / "sounds" / "victory.wav"))
 
         # Which level are we on?
@@ -200,6 +199,8 @@ class PlatformerView(arcade.View):
         # Load the physics engine for this map
         self.setup_physics_engine()
 
+        self.player.jump()  # TESTESTEST - attempt to fix freeze bug on game start
+
         # reset score
         self.score = 0
         self.score_multiplier = 1
@@ -220,16 +221,12 @@ class PlatformerView(arcade.View):
         if key in (arcade.key.LEFT, arcade.key.RIGHT):
             self.keys_pressed[key] = True
             self.keys_pressed["LAST"] = key
-            self.player.update_state(
-                self.physics_engine.can_jump(), self.physics_engine.jumps_since_ground
-            )
+            self.player.update_state()
 
-        # Check for pounce
+        # Check for pounce (or drop for YellowCat)
         if key == arcade.key.DOWN:
             self.keys_pressed[key] = True
-            self.player.update_state(
-                self.physics_engine.can_jump(), self.physics_engine.jumps_since_ground
-            )
+            self.player.update_state()
             if self.player.state.pounce.can_pounce:
                 # exaust all jumps
                 for i in range(game.N_JUMPS):
@@ -240,24 +237,15 @@ class PlatformerView(arcade.View):
                 with suppress(AttributeError):
                     self.player.drop()
 
-        # Check if we can jump
+        # Check if we can jump (or air-dash for RedCat)
         elif key == arcade.key.SPACE:
             self.keys_pressed[key] = True
-            self.player.update_state(
-                self.physics_engine.can_jump(), self.physics_engine.jumps_since_ground
-            )
-            if self.player.state.jump.can_jump:
-                self.player.jump()
-                self.physics_engine.increment_jump_counter()
-                # Play the jump sound
-                arcade.play_sound(self.jump_sound)
+            self.player.jump()
 
         # Check if we can activate superpower
         elif key == arcade.key.LCTRL:
             self.keys_pressed[key] = True
-            self.player.update_state(
-                self.physics_engine.can_jump(), self.physics_engine.jumps_since_ground
-            )
+            self.player.update_state()
             if self.player.state.superpower.is_ready:
                 self.player.activate_superpower()
 
@@ -336,9 +324,7 @@ class PlatformerView(arcade.View):
         # Update player movement based on the physics engine
         #        with suppress(OSError, GLException):  # NOTE: error caused by unpausing?
         self.physics_engine.update()
-        self.player.update_state(
-            self.physics_engine.can_jump(), self.physics_engine.jumps_since_ground
-        )
+        self.player.update_state()
         self.player.update_velocity()
         self.player.apply_friction()
         self.player.restrict_position(self.map_width)
@@ -530,13 +516,15 @@ class PlatformerView(arcade.View):
             self.new_score_image = self.get_score_image(self.score)
             self.last_drawn_score = self.score
 
-        arcade.draw_texture_rectangle(
-            self.view_left + 120,
-            self.view_bottom + game.SCREEN_PROPS.height - 75,
-            150,
-            75,
-            arcade.Texture(str(self.score), self.new_score_image),
-        )
+        with suppress(IndexError):
+            # IndexError - unkonwn cause
+            arcade.draw_texture_rectangle(
+                self.view_left + 120,
+                self.view_bottom + game.SCREEN_PROPS.height - 75,
+                150,
+                75,
+                arcade.Texture(str(self.score), self.new_score_image),
+            )
 
         # Draw lives HUD in the upper right
         if self.player.lives != self.last_drawn_lives:
@@ -544,13 +532,14 @@ class PlatformerView(arcade.View):
             self.lives_image = arcade.Texture(str(new_lives_image), new_lives_image)
             self.last_drawn_lives = self.player.lives
 
-        arcade.draw_texture_rectangle(
-            self.view_left + game.SCREEN_PROPS.width - 150,
-            self.view_bottom + game.SCREEN_PROPS.height - 50,
-            200,
-            50,
-            self.lives_image,
-        )
+        with suppress(IndexError):
+            arcade.draw_texture_rectangle(
+                self.view_left + game.SCREEN_PROPS.width - 150,
+                self.view_bottom + game.SCREEN_PROPS.height - 50,
+                200,
+                50,
+                self.lives_image,
+            )
 
         # Draw the score multiplier below the lives HUD
         if self.score_multiplier != self.last_drawn_score_multiplier:
@@ -577,7 +566,9 @@ class PlatformerView(arcade.View):
     def get_score_multiplier_image(self, multiplier: int):
         """Doc."""
 
-        img_list = [self.digit_dict["x"], self.digit_dict[multiplier]]
+        img_list = [self.digit_dict["x"]] + [
+            self.digit_dict[int(digit_char)] for digit_char in str(multiplier)
+        ]
         return crop_resize_concat_horizontally(img_list)
 
     def get_lives_hud(self, n_max_lives: int, n_lives_left: int):
@@ -601,12 +592,12 @@ class PlatformerView(arcade.View):
                 self.player.change_x = previous_player.change_x
                 self.player.change_y = previous_player.change_y
                 previous_player.position = (0, 0)  # move to safety
-                self.setup_physics_engine()
+                self.setup_physics_engine(self.physics_engine.jumps_since_ground)
         else:
             # TODO: play game over sound
             self.game_over_timer = 3.0
 
-    def setup_physics_engine(self):
+    def setup_physics_engine(self, jumps_since_ground=0):
         """Doc."""
 
         self.physics_engine = arcade.PhysicsEnginePlatformer(
@@ -615,8 +606,13 @@ class PlatformerView(arcade.View):
             gravity_constant=game.GRAVITY,
         )
 
+        self.player.physics_engine = self.physics_engine
+
         # multi-jumps
         self.physics_engine.enable_multi_jump(game.N_JUMPS)
+
+        # initiate jumps_since_ground
+        self.physics_engine.jumps_since_ground = jumps_since_ground
 
 
 class TitleView(arcade.View):

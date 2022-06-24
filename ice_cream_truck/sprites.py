@@ -1,5 +1,6 @@
 import math
 from collections import namedtuple
+from contextlib import suppress
 from pathlib import Path
 from random import choice, choices, randint, random, uniform
 from types import SimpleNamespace
@@ -439,6 +440,7 @@ class PlayerCat(BasicSprite):
     N_REQUIRED_FOR_SUPERPOWER = 25
     INV_TIME = 1.5
     POUNCE_RECOV = 50  # TODO: units?..
+    physics_engine: arcade.PhysicsEnginePlatformer
     texture: arcade.texture.Texture
     alpha: int
 
@@ -446,6 +448,7 @@ class PlayerCat(BasicSprite):
         color_str: ColorCatTextures(color_str) for color_str in game.PLAYER_COLORS
     }
     poof_dict = {color_str: Poof(Vector(0, 0), color_str) for color_str in game.PLAYER_COLORS}
+    jump_sound = arcade.load_sound(str(ASSETS_PATH / "sounds" / "jump.wav"))
 
     def __init__(
         self,
@@ -458,6 +461,7 @@ class PlayerCat(BasicSprite):
         lives=3,
         state=None,
         ground_height: float = None,
+        can_pounce_kill=False,
         **kwargs,
     ):
 
@@ -502,6 +506,7 @@ class PlayerCat(BasicSprite):
                 ),
                 air_dash=SimpleNamespace(
                     can_air_dash=False,
+                    is_dashing=False,
                 ),
                 drop=SimpleNamespace(
                     can_drop=False,
@@ -516,6 +521,9 @@ class PlayerCat(BasicSprite):
             )
         else:
             self.state = state
+
+        # Pounce-kill (BlueCat only)
+        self.can_pounce_kill = can_pounce_kill
 
         # Default to face-right
         self.face_direction = game.FACE_RIGHT
@@ -548,12 +556,16 @@ class PlayerCat(BasicSprite):
         # timers
         self.timer = 0.0  # animation
         self.superpower_timer = 0.0
+        self.air_dash_timer = 0.0  # RedCat only
 
         # poof
         self.poof_sprite = self.poof_dict[color_str]
 
-    def update_state(self, can_jump, n_jumps_since_ground, **kwargs):
+    def update_state(self, **kwargs):
         """Doc."""
+
+        can_jump = self.physics_engine.can_jump()
+        n_jumps_since_ground = self.physics_engine.jumps_since_ground
 
         # Figure out if we need to flip face left or right
         if self.acceleration < 0:
@@ -579,20 +591,33 @@ class PlayerCat(BasicSprite):
             and (abs(self.change_x) == self.speeds.RUN)
             and not self.state.is_near_edge
         )
-        self.state.pounce.is_pouncing = abs(self.change_x) == self.speeds.POUNCE and not can_jump
-        self.state.pounce.finishing_pounce = abs(self.change_x) == self.speeds.POUNCE and can_jump
+
+        self.state.pounce.is_pouncing = (
+            self.state.pounce.is_pouncing
+            and abs(self.change_x) > self.speeds.RUN
+            and not self.state.is_in_air
+        )
+        self.state.air_dash.is_dashing = (
+            self.state.air_dash.is_dashing
+            and abs(self.change_x) > self.speeds.RUN
+            and self.state.is_in_air
+            and self.air_dash_timer > 0
+        )
+
+        # dashing
+        if self.state.air_dash.is_dashing:
+            self.change_y = 0
+            self.air_dash_timer -= 1
 
         # pounce recovery
-        if self.state.pounce.finishing_pounce:
-            self.state.pounce.recovery_timer = self.POUNCE_RECOV
-        elif self.state.pounce.recovery_timer > 0:
+        if self.state.pounce.recovery_timer > 0:
             self.state.pounce.recovery_timer -= 1
 
         # check if falling
         self.state.jump.is_falling = self.change_y < 0
 
         # check if in air
-        self.state.is_in_air = self.state.jump.is_jumping or self.state.pounce.is_pouncing
+        self.state.is_in_air = self.state.jump.is_jumping
 
         # check if dropping (YellowCat)
         self.state.drop.is_dropping = self.state.drop.is_dropping and self.state.is_in_air
@@ -728,9 +753,6 @@ class PlayerCat(BasicSprite):
         """Doc."""
         # TODO: attempt to seperate directions from magnitudes? (1D vector) - could make code clearer
 
-        if self.state.pounce.finishing_pounce:
-            self.change_x *= self.speeds.SLIDE / self.speeds.POUNCE
-
         if self.state.pounce.recovery_timer > 0:
             self.max_run_speed = self.speeds.RUN / 1.5
             self.acceleration_magnitude = game.PLAYER_ACCELERATION_MAGNITUDE / 3
@@ -738,7 +760,7 @@ class PlayerCat(BasicSprite):
             self.max_run_speed = self.speeds.RUN
             self.acceleration_magnitude = game.PLAYER_ACCELERATION_MAGNITUDE
 
-        if not self.state.pounce.is_pouncing:
+        if not (self.state.pounce.is_pouncing or self.state.air_dash.is_dashing):
             if self.move_state == game.LEFT:
                 self.acceleration = -self.acceleration_magnitude
             elif self.move_state == game.RIGHT:
@@ -746,7 +768,7 @@ class PlayerCat(BasicSprite):
             else:
                 self.acceleration = 0
 
-            self.change_x = self.change_x = Limits(-self.max_run_speed, self.max_run_speed).clamp(
+            self.change_x = Limits(-self.max_run_speed, self.max_run_speed).clamp(
                 self.change_x + self.acceleration
             )
 
@@ -758,14 +780,20 @@ class PlayerCat(BasicSprite):
             ):
                 self.change_y *= self.JUMP_STOP_RATE
 
-    def jump(self, factor=1):
+    def jump(self, factor=1, is_killing=False):
         """Doc."""
 
-        # jumping is disabled while pouncing
-        if self.state.pounce.is_pouncing:
-            self.keys_pressed[arcade.key.SPACE] = False
-        else:
-            self.change_y += self.speeds.JUMP * factor
+        if self.physics_engine.can_jump() or is_killing:
+            # jumping is disabled while pouncing
+            if not self.state.pounce.is_pouncing:
+                self.change_y += self.speeds.JUMP * factor
+                self.physics_engine.increment_jump_counter()
+                # Play the jump sound
+                arcade.play_sound(self.jump_sound)
+
+        else:  # RedCat only
+            with suppress(AttributeError):
+                self.air_dash()
 
     def pounce(self):
         """Doc."""
@@ -775,7 +803,7 @@ class PlayerCat(BasicSprite):
             self.change_x = -self.speeds.POUNCE
         elif self.move_state == game.RIGHT:
             self.change_x = self.speeds.POUNCE
-        self.change_y = 6
+        self.state.pounce.recovery_timer = self.POUNCE_RECOV
 
     def apply_friction(self):
 
@@ -784,20 +812,37 @@ class PlayerCat(BasicSprite):
             if abs(self.change_x) < 1:
                 self.change_x = 0
 
+        elif self.state.pounce.is_pouncing:
+            self.change_x *= game.FRICTION / 1.015
+
     def can_kill_cat(self, cat) -> bool:
         """Doc."""
 
-        did_kill = (
-            self.change_y < 0
-            and self.center_y > cat.center_y - cat.height * 1 / 3
-            and abs(self.center_x - cat.center_x) < cat.width / 3
-            and self.hit_timer <= self.INV_TIME * 0.9
-            and not (self.state.pounce.is_pouncing or self.state.pounce.finishing_pounce)
-        )
+        # area damage when dropping (YellowCat)
+        if self.state.drop.is_dropping:
+            did_kill = abs(self.center_x - cat.center_x) < cat.width * 3
 
-        if did_kill:
-            self.change_y = 0
-            self.jump(factor=2)
+        elif self.can_pounce_kill and self.state.pounce.is_pouncing:
+            self.state.pounce.is_pouncing = False
+            self.physics_engine.increment_jump_counter()
+            self.jump(factor=2, is_killing=True)
+            return True
+
+        elif self.state.air_dash.is_dashing:
+            return True
+
+        else:
+            did_kill = (
+                self.change_y < -self.speeds.JUMP / 3
+                and self.center_y > cat.center_y - cat.height * 1 / 3
+                and abs(self.center_x - cat.center_x) < cat.width / 3
+                and self.hit_timer <= self.INV_TIME * 0.9
+                and not (self.state.pounce.is_pouncing or self.state.pounce.finishing_pounce)
+            )
+
+            if did_kill:
+                self.change_y = 0
+                self.jump(factor=2, is_killing=True)
 
         return did_kill
 
@@ -869,32 +914,9 @@ class BlueCat(PlayerCat):
             aura_color_str="skyblue",
             scale=game.CHARACTER_SCALING,
             lives=3,
+            can_pounce_kill=True,
             **kwargs,
         )
-
-    def can_kill_cat(self, cat) -> bool:
-        """Doc."""
-
-        if self.state.pounce.is_pouncing or self.state.pounce.finishing_pounce:
-            self.state.pounce.is_pouncing = False
-            self.change_x *= 2
-            self.jump(factor=2)
-            return True
-
-        else:
-            did_kill = (
-                self.change_y < 0
-                and self.center_y > cat.center_y - cat.height * 1 / 3
-                and abs(self.center_x - cat.center_x) < cat.width / 3
-                and self.hit_timer <= self.INV_TIME * 0.9
-                and not (self.state.pounce.is_pouncing or self.state.pounce.finishing_pounce)
-            )
-
-            if did_kill:
-                self.change_y = 0
-                self.jump(factor=2)
-
-            return did_kill
 
 
 class RedCat(PlayerCat):
@@ -902,6 +924,7 @@ class RedCat(PlayerCat):
 
     RUNNING_ANIMATION_FACTOR = 0.16
     POUNCE_RECOV = 40  # TODO: units?..
+    AIR_DASH_DURATION = 13  # TODO: units?..
 
     color_str = "red"
 
@@ -914,7 +937,7 @@ class RedCat(PlayerCat):
         super().__init__(
             *args,
             speeds=SimpleNamespace(RUN=12, SLIDE=6, JUMP=24, POUNCE=42),
-            acceleration_magnitude=1.08,
+            acceleration_magnitude=1.75,
             color_str=self.color_str,
             aura_color_str="palevioletred",
             scale=game.CHARACTER_SCALING * 0.9,
@@ -925,13 +948,14 @@ class RedCat(PlayerCat):
     def air_dash(self):
         """Doc"""
 
-        if self.state.is_in_air:
+        if self.state.is_in_air and self.physics_engine.jumps_since_ground < 3:
+            self.physics_engine.increment_jump_counter()
             self.state.air_dash.is_dashing = True
+            self.air_dash_timer = self.AIR_DASH_DURATION
             if self.move_state == game.LEFT:
                 self.change_x = -self.speeds.POUNCE
             elif self.move_state == game.RIGHT:
                 self.change_x = self.speeds.POUNCE
-            self.change_y = self.speeds.JUMP
 
     def get_hit(self, cat):
         """Doc."""
@@ -983,28 +1007,6 @@ class YellowCat(PlayerCat):
             self.state.drop.is_dropping = True
             self.change_x = 0.0
             self.change_y = -self.speeds.JUMP
-
-    def can_kill_cat(self, cat) -> bool:
-        """Doc."""
-
-        # area damage when dropping
-        if self.state.drop.is_dropping:
-            did_kill = abs(self.center_x - cat.center_x) < cat.width * 3
-
-        else:
-            did_kill = (
-                self.change_y < 0
-                and self.center_y > cat.center_y - cat.height * 1 / 3
-                and abs(self.center_x - cat.center_x) < cat.width / 3
-                and self.hit_timer <= self.INV_TIME * 0.9
-                and not (self.state.pounce.is_pouncing or self.state.pounce.finishing_pounce)
-            )
-
-            if did_kill:
-                self.change_y = 0
-                self.jump(factor=2)
-
-        return did_kill
 
 
 class Popsicle(BasicSprite):
