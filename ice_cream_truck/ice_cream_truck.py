@@ -30,16 +30,14 @@ ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
 
 
 # TODO:
-# Red: can air-roll (3rd jump + left/right), superpower is time-stop: many pops are thrown then everything slows down but the player, for a time
+# Red: superpower is time-stop: many pops are thrown then everything slows down but the player, for a time
 # Yellow: superpower is popsicle magnet for a time
 
-# TODO: can only switch cats at the house. if killed, next cat automatically starts at the house
 # TODO: turn on invulnerability for a few seconds when switching cats after cat dies
 # TODO: add available cat thumbnails to HUD
 # TODO: add sounds (getting hit, killing, competitor grabs popsicle, etc.)
 # TODO: scroll_viewport up only!
 # TODO: add additional sprites - scratching in air for pounce kill, falling on butt for yellow cat drop, 2 textures for "begging", getting hit
-# TODO: solve issue where game gets stuck on first jump/popsicle collection?
 
 
 class GameWindow(arcade.Window):
@@ -199,7 +197,7 @@ class PlatformerView(arcade.View):
         # Load the physics engine for this map
         self.setup_physics_engine()
 
-        self.player.jump()  # TESTESTEST - attempt to fix freeze bug on game start
+        self.player.jump()  # to fix freeze bug on game start
 
         # reset score
         self.score = 0
@@ -264,7 +262,8 @@ class PlatformerView(arcade.View):
 
         if key in self.keys_pressed.keys():
             self.keys_pressed[key] = False
-            self.player.update_velocity()
+
+    #            self.player.update_velocity() # TESTESTEST
 
     def on_update(self, delta_time: float) -> None:  # NOQA # C901
         """Updates the position of all screen objects
@@ -307,7 +306,7 @@ class PlatformerView(arcade.View):
             # AttributeError - no popsicles present
             self.popsicles.update_animation(delta_time)
             for popsicle in self.popsicles:
-                popsicle.move()
+                popsicle.move(delta_time)
                 # Check if popsicle flew off-screen or hit ground
                 if popsicle.type == "regular":
                     popsicle.restrict_position(self.map_width, should_kill=True)
@@ -325,7 +324,7 @@ class PlatformerView(arcade.View):
         #        with suppress(OSError, GLException):  # NOTE: error caused by unpausing?
         self.physics_engine.update()
         self.player.update_state()
-        self.player.update_velocity()
+        self.player.update_velocity(delta_time)
         self.player.apply_friction()
         self.player.restrict_position(self.map_width)
 
@@ -357,9 +356,9 @@ class PlatformerView(arcade.View):
                         uniform(0, game.SCREEN_PROPS.width), game.SCREEN_PROPS.height
                     ),
                     speeds=SimpleNamespace(
-                        RUN=10 / 3, SLIDE=5 / 3, JUMP=20 / 3, POUNCE=35 / 3
+                        RUN=uniform(75, 125), SLIDE=5 / 3, JUMP=20 / 3, POUNCE=35 / 3
                     ),  # pixels per frame
-                    acceleration_magnitude=50 / 3,
+                    acceleration_magnitude=50 / 3 * 60,
                     color_str=choice(list(game.COLORS - game.PLAYER_COLORS)),
                     game_view=self,
                     scale=game.CHARACTER_SCALING * uniform(1, 1.5),

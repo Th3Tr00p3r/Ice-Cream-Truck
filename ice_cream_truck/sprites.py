@@ -287,7 +287,6 @@ class CompetitorCat(BasicSprite):
         self.max_run_speed = self.speeds.RUN
         self.acceleration_magnitude = acceleration_magnitude
         self.acceleration = 0.0
-        self.delta_v = 0.0
 
         # for setting running animation frequency
         self.timer = 0.0
@@ -316,8 +315,8 @@ class CompetitorCat(BasicSprite):
         self.face_switch_timer += delta_time
 
         # update state
-        if self.delta_v != 0:
-            self.move_state = int(math.copysign(1, self.delta_v))
+        if self.acceleration != 0:
+            self.move_state = int(math.copysign(1, self.acceleration))
             if self.face_switch_timer > 0.5:
                 self.state.is_facing_left = self.move_state < 0
                 self.face_switch_timer = 0.0
@@ -349,7 +348,7 @@ class CompetitorCat(BasicSprite):
                     abs(self.change_x)
                     + (
                         self.acceleration_magnitude * delta_time * 10
-                        if self.delta_v * self.change_x < 0.0
+                        if self.acceleration * self.change_x < 0.0
                         or abs(self.change_x) <= self.speeds.SLIDE
                         else 0
                     )
@@ -371,14 +370,14 @@ class CompetitorCat(BasicSprite):
 
         # change position
         if self.state.is_in_air:
-            self.center_y += self.change_y
+            self.center_y += self.change_y * delta_time
             # change speed (due to 'gravity')
-            self.change_y -= game.GRAVITY * 0.1
+            self.change_y -= game.GRAVITY * 10
         else:
             self.change_y = 0.0
             self.center_y = self._height // 2 + 130
 
-        self.center_x += self.change_x
+        self.center_x += self.change_x * delta_time
 
         try:
             closest_popsicle = sorted(
@@ -393,7 +392,7 @@ class CompetitorCat(BasicSprite):
         except IndexError:
             # move towards ice_cream_truck
             self.truck_disp = self.game_view.ice_cream_truck.center_x - self.center_x
-            self.delta_v = (
+            self.acceleration = (
                 math.copysign(1, self.truck_disp) * self.acceleration_magnitude * delta_time
             )
             self.sought_popsicle = None
@@ -404,7 +403,7 @@ class CompetitorCat(BasicSprite):
             ):  # seek closest popsicle
                 self.sought_popsicle = closest_popsicle
                 self.mode = "fetching"
-            self.delta_v = (
+            self.acceleration = (
                 math.copysign(1, self.sought_popsicle.center_x - self.center_x)
                 * self.acceleration_magnitude
             )
@@ -419,7 +418,7 @@ class CompetitorCat(BasicSprite):
                 self.mode = "waiting"
             else:
                 self.change_x = Limits(-self.max_run_speed, self.max_run_speed).clamp(
-                    self.change_x + self.delta_v
+                    self.change_x + self.acceleration * delta_time
                 )
 
     def poof(self):
@@ -443,6 +442,7 @@ class PlayerCat(BasicSprite):
     physics_engine: arcade.PhysicsEnginePlatformer
     texture: arcade.texture.Texture
     alpha: int
+    change_x: float
 
     color_textures_dict = {
         color_str: ColorCatTextures(color_str) for color_str in game.PLAYER_COLORS
@@ -549,6 +549,7 @@ class PlayerCat(BasicSprite):
         self.acceleration_magnitude = acceleration_magnitude
         self.acceleration = 0.0
         self.spin_speed = 30
+        self.base_acceleration_magnitude = acceleration_magnitude
 
         # track number of self-colored popsicles collected (for superpower)
         self.n_favorite_pops_collected = 0
@@ -722,7 +723,7 @@ class PlayerCat(BasicSprite):
                 (
                     abs(self.change_x)
                     + (
-                        self.acceleration_magnitude * 20
+                        self.acceleration_magnitude / 2
                         if self.acceleration * self.change_x < 0
                         or abs(self.change_x) <= self.speeds.SLIDE
                         else 0
@@ -749,16 +750,15 @@ class PlayerCat(BasicSprite):
         if self.state.superpower.is_ready:
             self.add_aura_to_texture()
 
-    def update_velocity(self):  # , delta_time: float):
+    def update_velocity(self, delta_time: float):
         """Doc."""
-        # TODO: attempt to seperate directions from magnitudes? (1D vector) - could make code clearer
 
         if self.state.pounce.recovery_timer > 0:
             self.max_run_speed = self.speeds.RUN / 1.5
-            self.acceleration_magnitude = game.PLAYER_ACCELERATION_MAGNITUDE / 3
+            self.acceleration_magnitude = self.base_acceleration_magnitude / 3
         else:
             self.max_run_speed = self.speeds.RUN
-            self.acceleration_magnitude = game.PLAYER_ACCELERATION_MAGNITUDE
+            self.acceleration_magnitude = self.base_acceleration_magnitude
 
         if not (self.state.pounce.is_pouncing or self.state.air_dash.is_dashing):
             if self.move_state == game.LEFT:
@@ -769,7 +769,7 @@ class PlayerCat(BasicSprite):
                 self.acceleration = 0
 
             self.change_x = Limits(-self.max_run_speed, self.max_run_speed).clamp(
-                self.change_x + self.acceleration
+                self.change_x + self.acceleration * delta_time
             )
 
             # stopping jump by letting go of key
@@ -909,7 +909,7 @@ class BlueCat(PlayerCat):
         super().__init__(
             *args,
             speeds=SimpleNamespace(RUN=10, SLIDE=5, JUMP=20, POUNCE=35),
-            acceleration_magnitude=0.75,
+            acceleration_magnitude=0.75 * 60,
             color_str=self.color_str,
             aura_color_str="skyblue",
             scale=game.CHARACTER_SCALING,
@@ -937,7 +937,7 @@ class RedCat(PlayerCat):
         super().__init__(
             *args,
             speeds=SimpleNamespace(RUN=12, SLIDE=6, JUMP=24, POUNCE=42),
-            acceleration_magnitude=1.75,
+            acceleration_magnitude=0.9 * 60,
             color_str=self.color_str,
             aura_color_str="palevioletred",
             scale=game.CHARACTER_SCALING * 0.9,
@@ -989,7 +989,7 @@ class YellowCat(PlayerCat):
         super().__init__(
             *args,
             speeds=SimpleNamespace(RUN=8, SLIDE=4, JUMP=19.2, POUNCE=28),
-            acceleration_magnitude=0.48,
+            acceleration_magnitude=0.6 * 60,
             color_str=self.color_str,
             aura_color_str="yellow",
             scale=game.CHARACTER_SCALING * 1.1,
@@ -1035,25 +1035,25 @@ class Popsicle(BasicSprite):
 
         self.color_str: str = None
 
-    def move(self):
+    def move(self, delta_time):
         """Doc."""
 
-        # change position
-        self.center_x += self.change_x
-        self.center_y += self.change_y
+        # update velocity
+        self.change_y -= game.GRAVITY * 250 * delta_time
 
-        # change speed (due to 'gravity')
-        self.change_y -= game.GRAVITY * 0.1
+        # change position
+        self.center_x += self.change_x * delta_time
+        self.center_y += self.change_y * delta_time
 
         # spin
-        self.angle += self.change_angle
+        self.angle += self.change_angle * delta_time
 
     def bounce(self):
         """Doc."""
 
-        if self.change_y < -0.01:
+        if self.change_y < -0.001:
             self.change_angle *= uniform(-1.5, 1.5)
-            self.change_y *= -uniform(0.25, 0.75)
+            self.change_y *= -uniform(0.3, 0.5)
         else:
             self.stop()
 
@@ -1156,6 +1156,7 @@ class IceCreamTruck(BasicSprite):
     ANIMATION_RATE = 10
     SHAKE_PAUSE = 1
     THROW_PROBABILITY = 0.03
+    THROW_SPEED = 600
     angle: float
 
     def __init__(self, init_position: Vector, **kwargs):
@@ -1202,7 +1203,7 @@ class IceCreamTruck(BasicSprite):
             self.shaking_timer = self.SHAKE_PAUSE  # stop shaking
             return HeartPopsicle(
                 Vector(self.center_x, self.center_y),
-                game.PLAYER_MOVE_SPEED.RUN * uniform(0.75, 1.15),
+                self.THROW_SPEED * uniform(0.75, 1.15),
                 randint(75, 105),
             )
 
@@ -1215,7 +1216,7 @@ class IceCreamTruck(BasicSprite):
             return RegularPopsicle(
                 color_str,
                 Vector(self.center_x, self.center_y),
-                game.PLAYER_MOVE_SPEED.RUN * uniform(0.25, 1),
+                self.THROW_SPEED * uniform(0.25, 1),
                 randint(45, 135),
             )
 
