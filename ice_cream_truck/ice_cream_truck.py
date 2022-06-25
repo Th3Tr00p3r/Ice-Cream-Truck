@@ -346,7 +346,8 @@ class PlatformerView(arcade.View):
 
         # Throw Popsicle
         if (new_popsicle := self.ice_cream_truck.throw_popsicle()) is not None:
-            self.popsicles.append(new_popsicle)
+            with suppress(IndexError):
+                self.popsicles.append(new_popsicle)
 
         # Create new competitor cat
         if self.n_cats < self.n_allowed_cats and random() < self.new_cat_prob_frame:
