@@ -13,7 +13,7 @@ GRAVITY = 1.0
 FRICTION = 0.95
 
 # Window dimensions
-SCREEN_PROPS = ScreenProps(1600, 750)
+SCREEN_PROPS = ScreenProps(1600, 800)
 SCREEN_TITLE = "Ice Cream Truck"
 
 # Viewport margins

@@ -33,8 +33,10 @@ ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
 # Red: superpower is time-stop: many pops are thrown then everything slows down but the player, for a time
 # Yellow: Grows bigger with every popsicle. tramples smaller cats by pouncing. superpower is popsicle magnet for a time
 
-# TODO: add available cat thumbnails to HUD
-# TODO: add sounds (getting hit, killing, competitor grabs popsicle, etc.)
+# TODO: Keep 3 best high scores in a pickled dict file (to prevent easy tempering). Replace the scores and re-save the list if needed at the end of every game (ask for player input for name). Show the scores in the title screen.
+# TODO: Add title image and instructions page (only text over milky title image background - same as now) - Z to switch cats, space to jump, Ctrl to activate bonus popsicles,
+# TODO: add available cat thumbnails to HUD (use big cat images on sprite speadsheet
+# TODO: add sounds (getting hit, killing, competitor grabs popsicle, begging etc.)
 # TODO: add additional sprites - scratching in air for pounce kill, falling on butt for yellow cat drop, 2 textures for "begging", getting hit
 
 
@@ -260,8 +262,6 @@ class PlatformerView(arcade.View):
 
         if key in self.keys_pressed.keys():
             self.keys_pressed[key] = False
-
-    #            self.player.update_velocity() # TESTESTEST
 
     def on_update(self, delta_time: float) -> None:  # NOQA # C901
         """Updates the position of all screen objects
