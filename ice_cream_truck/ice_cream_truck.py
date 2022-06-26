@@ -31,12 +31,10 @@ ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
 
 # TODO:
 # Red: superpower is time-stop: many pops are thrown then everything slows down but the player, for a time
-# Yellow: superpower is popsicle magnet for a time
+# Yellow: Grows bigger with every popsicle. tramples smaller cats by pouncing. superpower is popsicle magnet for a time
 
-# TODO: turn on invulnerability for a few seconds when switching cats after cat dies
 # TODO: add available cat thumbnails to HUD
 # TODO: add sounds (getting hit, killing, competitor grabs popsicle, etc.)
-# TODO: scroll_viewport up only!
 # TODO: add additional sprites - scratching in air for pounce kill, falling on butt for yellow cat drop, 2 textures for "begging", getting hit
 
 
@@ -147,7 +145,7 @@ class PlatformerView(arcade.View):
         self.ground_height = ground_sprite.center_y + ground_sprite.height / 2
 
         # Find the edge of the map to control viewport scrolling
-        self.map_width = (map.width - 1) * map.tile_width * game.MAP_SCALING
+        self.map_width = map.width * map.tile_width * game.MAP_SCALING
 
         # Create the Ice Cream Man and Truck
         self.ice_cream_truck = IceCreamTruck(
@@ -353,8 +351,10 @@ class PlatformerView(arcade.View):
             self.cats.append(
                 CompetitorCat(
                     init_position=Vector(
-                        uniform(0, game.SCREEN_PROPS.width), game.SCREEN_PROPS.height
+                        choice([0, game.SCREEN_PROPS.width]),
+                        uniform(0, game.SCREEN_PROPS.height / 2),
                     ),
+                    init_speed=Vector(0, uniform(0, 50)),
                     speeds=SimpleNamespace(
                         RUN=uniform(75, 125), SLIDE=5 / 3, JUMP=20 / 3, POUNCE=35 / 3
                     ),  # pixels per frame
@@ -420,7 +420,7 @@ class PlatformerView(arcade.View):
                     cat.sought_popsicle = None
                     popsicle.remove_from_sprite_lists()
 
-            if cat in cats_collided_with_player:
+            if cat in cats_collided_with_player or self.player.state.drop.is_dropping:
                 if self.player.can_kill_cat(cat):
                     with suppress(ValueError):
                         self.poofs.append(cat.poof())
@@ -428,7 +428,7 @@ class PlatformerView(arcade.View):
                     self.n_cats -= 1
                     self.score_multiplier += 1
                     self.score_multiplier_timer = 5.0
-                else:
+                elif not self.player.state.drop.is_dropping:
                     self.player.get_hit(cat)
 
             if cat.mode == "waiting":
@@ -451,6 +451,7 @@ class PlatformerView(arcade.View):
 
     def scroll_viewport(self) -> None:
         """Scrolls the viewport when the player gets close to the edges"""
+
         # Scroll left
         # Find the current left boundary
         left_boundary = self.view_left + game.LEFT_VIEWPORT_MARGIN
@@ -473,15 +474,17 @@ class PlatformerView(arcade.View):
             if self.view_left > self.map_width - game.SCREEN_PROPS.width:
                 self.view_left = self.map_width - game.SCREEN_PROPS.width
 
-        #        # Scroll up
-        #        top_boundary = self.view_bottom + game.SCREEN_PROPS.height - game.TOP_VIEWPORT_MARGIN
-        #        if self.player.top > top_boundary:
-        #            self.view_bottom += self.player.top - top_boundary
+        # Scroll up
+        top_boundary = self.view_bottom + game.SCREEN_PROPS.height - game.TOP_VIEWPORT_MARGIN
+        if self.player.top > top_boundary:
+            self.view_bottom += self.player.top - top_boundary
 
         # Scroll down
         bottom_boundary = self.view_bottom + game.BOTTOM_VIEWPORT_MARGIN
         if self.player.bottom < bottom_boundary:
             self.view_bottom -= bottom_boundary - self.player.bottom
+            if self.view_bottom < 0:
+                self.view_bottom = 0
 
         # Only scroll to integers. Otherwise we end up with pixels that
         # don't line up on the screen
@@ -593,6 +596,8 @@ class PlatformerView(arcade.View):
                 self.player.change_y = previous_player.change_y
                 previous_player.position = (0, 0)  # move to safety
                 self.setup_physics_engine(self.physics_engine.jumps_since_ground)
+                if not previous_player.is_alive:
+                    self.player.hit_timer = self.player.INV_TIME
         else:
             # TODO: play game over sound
             self.game_over_timer = 3.0

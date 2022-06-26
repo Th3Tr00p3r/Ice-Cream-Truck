@@ -217,6 +217,7 @@ class CompetitorCat(BasicSprite):
     def __init__(
         self,
         init_position: Vector,
+        init_speed: Vector,
         speeds: SimpleNamespace,
         acceleration_magnitude: float,
         color_str: str,
@@ -287,6 +288,9 @@ class CompetitorCat(BasicSprite):
         self.max_run_speed = self.speeds.RUN
         self.acceleration_magnitude = acceleration_magnitude
         self.acceleration = 0.0
+
+        # initial velocity
+        self.change_x, self.change_y = init_speed
 
         # for setting running animation frequency
         self.timer = 0.0
@@ -820,7 +824,11 @@ class PlayerCat(BasicSprite):
 
         # area damage when dropping (YellowCat)
         if self.state.drop.is_dropping:
-            did_kill = abs(self.center_x - cat.center_x) < cat.width * 3
+            above_ground_height = self.center_y - self.ground_height
+            if above_ground_height <= cat.height:
+                did_kill = abs(self.center_x - cat.center_x) < cat.width * abs(self.change_y / 30)
+            else:
+                return False
 
         elif self.can_pounce_kill and self.state.pounce.is_pouncing:
             self.state.pounce.is_pouncing = False
@@ -988,7 +996,7 @@ class YellowCat(PlayerCat):
 
         super().__init__(
             *args,
-            speeds=SimpleNamespace(RUN=8, SLIDE=4, JUMP=19.2, POUNCE=28),
+            speeds=SimpleNamespace(RUN=8, SLIDE=4, JUMP=16, POUNCE=28),
             acceleration_magnitude=0.6 * 60,
             color_str=self.color_str,
             aura_color_str="yellow",
@@ -1003,7 +1011,7 @@ class YellowCat(PlayerCat):
         """Doc."""
 
         above_ground_height = self.center_y - self.ground_height
-        if self.state.is_in_air and above_ground_height > self.height * 2.5:
+        if self.state.is_in_air and above_ground_height > self.height * 1.75:
             self.state.drop.is_dropping = True
             self.change_x = 0.0
             self.change_y = -self.speeds.JUMP

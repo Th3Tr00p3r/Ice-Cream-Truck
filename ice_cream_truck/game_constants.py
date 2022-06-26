@@ -2,8 +2,6 @@
 Game Constants
 """
 
-from types import SimpleNamespace
-
 from helper import ScreenProps, Vector
 
 # General
@@ -15,15 +13,15 @@ GRAVITY = 1.0
 FRICTION = 0.95
 
 # Window dimensions
-SCREEN_PROPS = ScreenProps(1500, 975)
+SCREEN_PROPS = ScreenProps(1600, 750)
 SCREEN_TITLE = "Ice Cream Truck"
 
 # Viewport margins
 # How close do we have to be to scroll the viewport?
-LEFT_VIEWPORT_MARGIN = 500
-RIGHT_VIEWPORT_MARGIN = 500
-TOP_VIEWPORT_MARGIN = 150
-BOTTOM_VIEWPORT_MARGIN = 0
+LEFT_VIEWPORT_MARGIN = 0
+RIGHT_VIEWPORT_MARGIN = 0
+TOP_VIEWPORT_MARGIN = 10
+BOTTOM_VIEWPORT_MARGIN = 600
 
 # Scaling Constants
 MAP_SCALING = 0.5
@@ -39,8 +37,6 @@ RIGHT = 1
 STOP = 0
 
 # PlayerCat constants
-PLAYER_ACCELERATION_MAGNITUDE = 0.75
-PLAYER_MOVE_SPEED = SimpleNamespace(RUN=10, SLIDE=5, JUMP=20, POUNCE=35)  # pixels per frame
 PLAYER_START_POS = Vector(100, 450)  # pixels from bottom, pixels from left
 N_JUMPS = 2
 PLAYER_COLORS = {"deepskyblue", "red", "gold"}
