@@ -55,7 +55,7 @@ class SpriteMixin:
             LEFT=left_texture,
         )
 
-    def restrict_position(self, map_width, should_kill=False, no_bottom=False):
+    def restrict_position(self, map_width, should_kill=False, bottom=0):
         """Restrict sprite position so screen width and bottom - either treat as ground/wall or kill"""
 
         if self.left < 0:
@@ -68,12 +68,12 @@ class SpriteMixin:
             if should_kill:
                 self.kill()
                 self.is_off_screen = True
-        if self.bottom < 0:
-            if no_bottom:
+        if self.bottom < bottom:
+            if should_kill:
                 self.kill()
                 self.is_off_screen = True
             else:
-                self.bottom = 0
+                self.bottom = bottom
 
 
 class AnimatedTexture:
@@ -113,28 +113,34 @@ class ColorCatTextures(SpriteMixin):
 
         return SimpleNamespace(
             standing=self.load_texture_pair(
-                self.MAIN_TEXTURE_PATH / "catStanding.png", self.color_str
+                self.MAIN_TEXTURE_PATH / "standing1.png", self.color_str
             ),
             running=[
-                self.load_texture_pair(
-                    self.MAIN_TEXTURE_PATH / f"catRunning{i}.png", self.color_str
-                )
-                for i in (1, 2, 3, 4)
+                self.load_texture_pair(self.MAIN_TEXTURE_PATH / f"running{i}.png", self.color_str)
+                for i in (1, 2, 3, 4, 5, 6)
             ],
             pouncing=self.load_texture_pair(
-                self.MAIN_TEXTURE_PATH / "catRunning4.png", self.color_str
+                self.MAIN_TEXTURE_PATH / "running6.png", self.color_str
             ),
-            sliding=self.load_texture_pair(
-                self.MAIN_TEXTURE_PATH / "catRunning1.png", self.color_str
+            sliding=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "running1.png", self.color_str),
+            jumping=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "jumping1.png", self.color_str),
+            stalling=[
+                self.load_texture_pair(self.MAIN_TEXTURE_PATH / f"stalling{i}.png", self.color_str)
+                for i in (1, 2)
+            ],
+            falling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "falling1.png", self.color_str),
+            scratching=self.load_texture_pair(
+                self.MAIN_TEXTURE_PATH / "scratching1.png", self.color_str
             ),
-            jumping=self.load_texture_pair(
-                self.MAIN_TEXTURE_PATH / "catJumping.png", self.color_str
+            dropping=self.load_texture_pair(
+                self.MAIN_TEXTURE_PATH / "dropping1.png", self.color_str
             ),
-            stalling=self.load_texture_pair(
-                self.MAIN_TEXTURE_PATH / "catStalling.png", self.color_str
-            ),
-            falling=self.load_texture_pair(
-                self.MAIN_TEXTURE_PATH / "catFalling.png", self.color_str
+            begging=[
+                self.load_texture_pair(self.MAIN_TEXTURE_PATH / f"begging{i}.png", self.color_str)
+                for i in (1, 2, 3, 2)
+            ],
+            getting_hit=self.load_texture_pair(
+                self.MAIN_TEXTURE_PATH / "getting_hit1.png", self.color_str
             ),
         )
 
@@ -201,7 +207,8 @@ class Poof(BasicSprite):
 class CompetitorCat(BasicSprite):
     """Doc."""
 
-    RUNNING_ANIMATION_FACTOR = 0.4  # TODO: twice that of player (should be determined by speed)
+    RUNNING_ANIMATION_FACTOR = 0.4
+    BEGGING_ANIMATION_DURATION_s = 3
     MAX_LIVES = 1
     texture: arcade.texture.Texture
     change_x: float
@@ -228,7 +235,7 @@ class CompetitorCat(BasicSprite):
 
         super().__init__(
             init_position,
-            filename=ASSETS_PATH / "images" / "cat" / "catStanding.png",
+            filename=ASSETS_PATH / "images" / "cat" / "standing1.png",
             hit_box_algorithm="Detailed",
             scale=scale,
             **kwargs,
@@ -336,8 +343,11 @@ class CompetitorCat(BasicSprite):
         if self.change_y < 0 and abs(self.change_x) <= self.speeds.RUN:
             if 5 < self.change_y:
                 self.change_texture_and_hitbox("jumping", change_hitbox=True)
-            elif -5 < self.change_y < 5:
-                self.change_texture_and_hitbox("stalling", change_hitbox=True)
+            elif 0 < self.change_y < 5:
+                self.change_texture_and_hitbox("stalling", idx=0, change_hitbox=True)
+            elif -5 < self.change_y < 0:
+
+                self.change_texture_and_hitbox("stalling", idx=1, change_hitbox=True)
             elif self.change_y < -5:
                 self.change_texture_and_hitbox("falling")
 
@@ -346,12 +356,12 @@ class CompetitorCat(BasicSprite):
             self.change_texture_and_hitbox("pouncing")
 
         # Running animation
-        elif not self.mode == "waiting":
+        elif not self.mode == "begging":
             if self.timer >= self.RUNNING_ANIMATION_FACTOR / (
                 (
                     abs(self.change_x)
                     + (
-                        self.acceleration_magnitude * delta_time * 10
+                        self.acceleration_magnitude * delta_time
                         if self.acceleration * self.change_x < 0.0
                         or abs(self.change_x) <= self.speeds.SLIDE
                         else 0
@@ -365,9 +375,14 @@ class CompetitorCat(BasicSprite):
                 self.texture_idx = 0
             self.change_texture_and_hitbox("running", idx=self.texture_idx, change_hitbox=True)
 
-        # Idle animation
+        # Begging animation
         else:
-            self.change_texture_and_hitbox("standing")
+            if self.timer >= self.BEGGING_ANIMATION_DURATION_s / len(self.loaded_textures.begging):
+                self.texture_idx += 1
+                self.timer = 0
+            if self.texture_idx > len(self.loaded_textures.begging) - 1:
+                self.texture_idx = 0
+            self.change_texture_and_hitbox("begging", idx=self.texture_idx, change_hitbox=True)
 
     def seek(self, delta_time: float):
         """Fetch closest self-colored popsicle if one exists, otherwise go to ice cream truck"""
@@ -414,12 +429,12 @@ class CompetitorCat(BasicSprite):
 
         finally:
             if (
-                self.mode in {"returning", "waiting"}
+                self.mode in {"returning", "begging"}
                 and (abs(self.truck_disp) <= self.game_view.ice_cream_truck._width / 2)
                 and self.change_x < self.speeds.SLIDE
             ):
                 self.change_x = 0.0
-                self.mode = "waiting"
+                self.mode = "begging"
             else:
                 self.change_x = Limits(-self.max_run_speed, self.max_run_speed).clamp(
                     self.change_x + self.acceleration * delta_time
@@ -437,10 +452,11 @@ class PlayerCat(BasicSprite):
     """Doc."""
 
     MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "cat"
-    RUNNING_ANIMATION_FACTOR = 0.2
-    JUMP_STOP_RATE = 0.9
+    RUNNING_ANIMATION_FACTOR = 0.4
+    JUMP_STOP_RATE = 0.95
     MAX_LIVES = 5
     N_REQUIRED_FOR_SUPERPOWER = 25
+    POUNCE_DURATION = 13  # units?
     INV_TIME = 1.5
     POUNCE_RECOV = 50  # TODO: units?..
     physics_engine: arcade.PhysicsEnginePlatformer
@@ -471,7 +487,7 @@ class PlayerCat(BasicSprite):
 
         super().__init__(
             init_position,
-            filename=self.MAIN_TEXTURE_PATH / "catStanding.png",
+            filename=self.MAIN_TEXTURE_PATH / "running1.png",
             hit_box_algorithm="Detailed",
             **kwargs,
         )
@@ -562,6 +578,7 @@ class PlayerCat(BasicSprite):
         self.timer = 0.0  # animation
         self.superpower_timer = 0.0
         self.air_dash_timer = 0.0  # RedCat only
+        self.pounce_timer = 0.0
 
         # poof
         self.poof_sprite = self.poof_dict[color_str]
@@ -599,18 +616,25 @@ class PlayerCat(BasicSprite):
 
         self.state.pounce.is_pouncing = (
             self.state.pounce.is_pouncing
-            and abs(self.change_x) > self.speeds.RUN
+            # and abs(self.change_x) > self.speeds.RUN
             and not self.state.is_in_air
+            and self.pounce_timer > 0
         )
         self.state.air_dash.is_dashing = (
             self.state.air_dash.is_dashing
-            and abs(self.change_x) > self.speeds.RUN
+            # and abs(self.change_x) > self.speeds.RUN
             and self.state.is_in_air
             and self.air_dash_timer > 0
         )
 
+        # pouncing
+        if self.state.pounce.is_pouncing:
+            self.change_x = self.state.pounce.direction * self.speeds.POUNCE
+            self.pounce_timer -= 1
+
         # dashing
         if self.state.air_dash.is_dashing:
+            self.change_x = self.state.air_dash.direction * self.speeds.POUNCE
             self.change_y = 0
             self.air_dash_timer -= 1
 
@@ -684,7 +708,7 @@ class PlayerCat(BasicSprite):
         else:  # use default hitbox
             self.hit_box = self.init_hitbox
 
-    def update_animation(self, delta_time: float, jumps_since_ground: int):
+    def update_animation(self, delta_time: float):
         """Doc."""
 
         self.timer += delta_time
@@ -699,18 +723,29 @@ class PlayerCat(BasicSprite):
         # stop spinning
         self.change_angle = 0
 
+        # hit animation
+        if self.hit_timer >= self.INV_TIME * 2 / 3:
+            self.change_texture_and_hitbox("getting_hit")
+
+        # drop animation (YellowCat)
+        elif self.state.drop.is_dropping:
+            self.angle = 0
+            self.change_texture_and_hitbox("dropping")
+
         # Jumping/Stalling/Falling animation
-        if (jumps_since_ground >= 1 or self.change_y < 0.0) and abs(
+        elif (self.physics_engine.jumps_since_ground >= 1 or self.change_y < 0.0) and abs(
             self.change_x
         ) <= self.speeds.RUN:
             if 5 < self.change_y:
                 self.change_texture_and_hitbox("jumping", change_hitbox=True)
-            elif -5 < self.change_y < 5:
-                self.change_texture_and_hitbox("stalling", change_hitbox=True)
+            elif 0 < self.change_y < 5:
+                self.change_texture_and_hitbox("stalling", idx=0)
+            elif -5 < self.change_y < 0:
+                self.change_texture_and_hitbox("stalling", idx=1)
             elif self.change_y < -5:
                 self.change_texture_and_hitbox("falling")
 
-            if jumps_since_ground >= 2:
+            if self.physics_engine.jumps_since_ground >= 2:
                 if self.change_y > -5:
                     self.change_angle = -self.face_direction * self.spin_speed
                 else:
@@ -718,7 +753,16 @@ class PlayerCat(BasicSprite):
 
         # pounce animation
         elif self.state.pounce.is_pouncing:
-            self.change_texture_and_hitbox("pouncing")
+            if self.can_pounce_kill:  # BlueCat
+                self.angle = -self.move_state * 20
+                self.change_texture_and_hitbox("scratching", change_hitbox=True)
+            else:
+                self.change_texture_and_hitbox("pouncing", change_hitbox=True)
+
+        # air-dash animation (RedCat)
+        elif self.state.air_dash.is_dashing:
+            self.angle = -self.move_state * 20
+            self.change_texture_and_hitbox("scratching", change_hitbox=True)
 
         # Running animation
         elif not self.move_state == game.STOP:
@@ -727,7 +771,7 @@ class PlayerCat(BasicSprite):
                 (
                     abs(self.change_x)
                     + (
-                        self.acceleration_magnitude / 2
+                        self.acceleration_magnitude * delta_time
                         if self.acceleration * self.change_x < 0
                         or abs(self.change_x) <= self.speeds.SLIDE
                         else 0
@@ -737,7 +781,7 @@ class PlayerCat(BasicSprite):
             ) / len(self.loaded_textures.running):
                 self.texture_idx += 1
                 self.timer = 0
-            if self.texture_idx == len(self.loaded_textures.running):
+            if self.texture_idx > len(self.loaded_textures.running) - 1:
                 self.texture_idx = 0
             self.change_texture_and_hitbox("running", idx=self.texture_idx, change_hitbox=True)
 
@@ -758,23 +802,26 @@ class PlayerCat(BasicSprite):
         """Doc."""
 
         if self.state.pounce.recovery_timer > 0:
-            self.max_run_speed = self.speeds.RUN / 1.5
-            self.acceleration_magnitude = self.base_acceleration_magnitude / 3
+            self.max_run_speed = self.speeds.RUN / 3
         else:
             self.max_run_speed = self.speeds.RUN
-            self.acceleration_magnitude = self.base_acceleration_magnitude
+
+        # set acceleration
+        if self.move_state == game.LEFT:
+            self.acceleration = -self.acceleration_magnitude
+        elif self.move_state == game.RIGHT:
+            self.acceleration = self.acceleration_magnitude
+        else:
+            self.acceleration = 0
 
         if not (self.state.pounce.is_pouncing or self.state.air_dash.is_dashing):
-            if self.move_state == game.LEFT:
-                self.acceleration = -self.acceleration_magnitude
-            elif self.move_state == game.RIGHT:
-                self.acceleration = self.acceleration_magnitude
-            else:
-                self.acceleration = 0
-
-            self.change_x = Limits(-self.max_run_speed, self.max_run_speed).clamp(
-                self.change_x + self.acceleration * delta_time
-            )
+            speed_range = Limits(-self.max_run_speed, self.max_run_speed)
+            if self.change_x in speed_range:
+                self.change_x = speed_range.clamp(self.change_x + self.acceleration * delta_time)
+            else:  # auto-slow
+                self.change_x += (
+                    -math.copysign(1, self.change_x) * self.acceleration_magnitude * 2 * delta_time
+                )  # TESTESTEST
 
             # stopping jump by letting go of key
             if (
@@ -784,14 +831,15 @@ class PlayerCat(BasicSprite):
             ):
                 self.change_y *= self.JUMP_STOP_RATE
 
-    def jump(self, factor=1, is_killing=False):
+    def jump(self, factor=1, n_jumps=1, is_killing=False):
         """Doc."""
 
         if self.physics_engine.can_jump() or is_killing:
             # jumping is disabled while pouncing
             if not self.state.pounce.is_pouncing:
                 self.change_y += self.speeds.JUMP * factor
-                self.physics_engine.increment_jump_counter()
+                for i in range(n_jumps):
+                    self.physics_engine.increment_jump_counter()
                 # Play the jump sound
                 arcade.play_sound(self.jump_sound)
 
@@ -803,37 +851,33 @@ class PlayerCat(BasicSprite):
         """Doc."""
 
         self.state.pounce.is_pouncing = True
-        if self.move_state == game.LEFT:
-            self.change_x = -self.speeds.POUNCE
-        elif self.move_state == game.RIGHT:
-            self.change_x = self.speeds.POUNCE
+        self.state.pounce.direction = self.move_state
         self.state.pounce.recovery_timer = self.POUNCE_RECOV
+        self.pounce_timer = self.POUNCE_DURATION
 
     def apply_friction(self):
 
-        if self.move_state == game.STOP and not self.state.is_in_air:
+        if self.move_state != math.copysign(1, self.change_x) and not self.state.is_in_air:
             self.change_x *= game.FRICTION
             if abs(self.change_x) < 1:
                 self.change_x = 0
 
-        elif self.state.pounce.is_pouncing:
-            self.change_x *= game.FRICTION / 1.015
-
     def can_kill_cat(self, cat) -> bool:
         """Doc."""
 
-        # area damage when dropping (YellowCat)
+        # area kill when dropping (YellowCat)
         if self.state.drop.is_dropping:
-            above_ground_height = self.center_y - self.ground_height
+            above_ground_height = self.bottom - self.ground_height
             if above_ground_height <= cat.height:
                 did_kill = abs(self.center_x - cat.center_x) < cat.width * abs(self.change_y / 30)
             else:
                 return False
 
+        # pounce-kill (BlueCat)
         elif self.can_pounce_kill and self.state.pounce.is_pouncing:
             self.state.pounce.is_pouncing = False
-            self.physics_engine.increment_jump_counter()
-            self.jump(factor=2, is_killing=True)
+            self.jump(factor=2, n_jumps=2, is_killing=True)
+            self.change_x *= 0.5
             return True
 
         elif self.state.air_dash.is_dashing:
@@ -860,11 +904,11 @@ class PlayerCat(BasicSprite):
         if (
             abs(self.center_x - cat.center_x) < cat.width / 2
             and abs(self.center_y - cat.center_y) < cat.height / 2
-        ):
+        ) and not self.state.drop.is_dropping:
             if self.lives >= 1 and self.hit_timer <= 0:
                 if self.lives > 1:
                     self.hit_timer = self.INV_TIME  # seconds?
-                    self.change_x = choice([-50, 50])
+                    self.change_x = choice([-self.speeds.POUNCE, self.speeds.POUNCE])
                 self.lives -= 1
 
     def poof(self):
@@ -884,7 +928,8 @@ class PlayerCat(BasicSprite):
         """Add an aura effect to the current texture"""
 
         aura_img = get_aura_image(self.texture.image, self.aura_color_str)
-        self.texture = arcade.Texture(str(aura_img), aura_img)
+        with suppress(IndexError):  # arcade issue
+            self.texture = arcade.Texture(str(aura_img), aura_img)
 
     def update_superpower_timer(self, delta_time):
         """Doc."""
@@ -932,7 +977,7 @@ class RedCat(PlayerCat):
 
     RUNNING_ANIMATION_FACTOR = 0.16
     POUNCE_RECOV = 40  # TODO: units?..
-    AIR_DASH_DURATION = 13  # TODO: units?..
+    AIR_DASH_DURATION = 12  # TODO: units?..
 
     color_str = "red"
 
@@ -960,10 +1005,7 @@ class RedCat(PlayerCat):
             self.physics_engine.increment_jump_counter()
             self.state.air_dash.is_dashing = True
             self.air_dash_timer = self.AIR_DASH_DURATION
-            if self.move_state == game.LEFT:
-                self.change_x = -self.speeds.POUNCE
-            elif self.move_state == game.RIGHT:
-                self.change_x = self.speeds.POUNCE
+            self.state.air_dash.direction = self.move_state
 
     def get_hit(self, cat):
         """Doc."""

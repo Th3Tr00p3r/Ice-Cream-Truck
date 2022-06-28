@@ -17,6 +17,7 @@ repos:
       hooks:
           - id: isort
             args: [--profile, black, --filter-files]
+            exclude: ^notebooks
 
     - repo: https://github.com/ambv/black
       rev: 21.9b0
@@ -28,6 +29,7 @@ repos:
       rev: 3.9.2
       hooks:
           - id: flake8
+            exclude: ^notebooks
 
     - repo: https://github.com/jumanjihouse/pre-commit-hook-yamlfmt
       rev: 0.1.0   # or specific tag
@@ -40,3 +42,4 @@ repos:
       hooks:
           - id: mypy
             args: [--no-strict-optional, --ignore-missing-imports]
+            exclude: ^notebooks

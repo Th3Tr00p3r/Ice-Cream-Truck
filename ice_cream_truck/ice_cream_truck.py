@@ -13,8 +13,6 @@ import arcade
 import game_constants as game
 import PIL
 from helper import Vector, crop_resize_concat_horizontally
-
-# from pyglet.gl.lib import GLException
 from sprites import (
     BlueCat,
     CompetitorCat,
@@ -37,7 +35,6 @@ ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
 # TODO: Add title image and instructions page (only text over milky title image background - same as now) - Z to switch cats, space to jump, Ctrl to activate bonus popsicles,
 # TODO: add available cat thumbnails to HUD (use big cat images on sprite speadsheet
 # TODO: add sounds (getting hit, killing, competitor grabs popsicle, begging etc.)
-# TODO: add additional sprites - scratching in air for pounce kill, falling on butt for yellow cat drop, 2 textures for "begging", getting hit
 
 
 class GameWindow(arcade.Window):
@@ -316,7 +313,7 @@ class PlatformerView(arcade.View):
                         # melt popsicle
                         popsicle.melt(delta_time)
                 else:  # heart
-                    popsicle.restrict_position(self.map_width, should_kill=True, no_bottom=True)
+                    popsicle.restrict_position(self.map_width, should_kill=True)
 
         # Update player movement based on the physics engine
         #        with suppress(OSError, GLException):  # NOTE: error caused by unpausing?
@@ -358,7 +355,7 @@ class PlatformerView(arcade.View):
                     speeds=SimpleNamespace(
                         RUN=uniform(75, 125), SLIDE=5 / 3, JUMP=20 / 3, POUNCE=35 / 3
                     ),  # pixels per frame
-                    acceleration_magnitude=50 / 3 * 60,
+                    acceleration_magnitude=100 * 60,
                     color_str=choice(list(game.COLORS - game.PLAYER_COLORS)),
                     game_view=self,
                     scale=game.CHARACTER_SCALING * uniform(1, 1.5),
@@ -367,7 +364,7 @@ class PlatformerView(arcade.View):
             self.n_cats += 1
 
         # Update the player animation
-        self.player.update_animation(delta_time, self.physics_engine.jumps_since_ground)
+        self.player.update_animation(delta_time)
 
         # Update the animations for our map objects as well
         self.map_sprite_lists["background"].update_animation(delta_time)
@@ -431,8 +428,8 @@ class PlatformerView(arcade.View):
                 elif not self.player.state.drop.is_dropping:
                     self.player.get_hit(cat)
 
-            if cat.mode == "waiting":
-                self.ice_cream_truck.color_pop_probs_dict[cat.color_str] *= 5
+            if cat.mode == "begging":
+                self.ice_cream_truck.color_pop_probs_dict[cat.color_str] *= 2
 
         # update poofs
         self.poofs.update_animation(delta_time)
@@ -592,8 +589,12 @@ class PlatformerView(arcade.View):
                 self.player = next_player
                 self.player.state = previous_player.state
                 self.player.position = previous_player.position
+                self.player.center_y += (
+                    self.player.height
+                )  # to deal with physics engine ground collision
                 self.player.change_x = previous_player.change_x
                 self.player.change_y = previous_player.change_y
+                self.player.angle = previous_player.angle
                 previous_player.position = (0, 0)  # move to safety
                 self.setup_physics_engine(self.physics_engine.jumps_since_ground)
                 if not previous_player.is_alive:
