@@ -37,7 +37,8 @@ ASSETS_PATH = Path("./assets")
 # TODO: Show the scores in the title screen: Keep 3 best high scores in a pickled dict file (to prevent easy tempering). Replace the scores and re-save the list if needed at the end of every game (ask for player input for name).
 # TODO: game over screen should show 3 best high scores and let you type in your name if your score is high enough to enter. (only show high scores if high enogh)
 # TODO: add available cat thumbnails to HUD (use big cat images on sprite speadsheet
-# TODO: add sounds for: competitor grabs popsicle, begging etc.)
+# TODO: add sounds for: getting killed, competitor grabs popsicle, begging etc.
+# TODO: build the cats' house and the ice cream truck using free Kenney parts and PIL
 
 
 class GameWindow(arcade.Window):
