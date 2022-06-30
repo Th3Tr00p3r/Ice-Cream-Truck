@@ -12,7 +12,8 @@ import PIL
 from helper import Limits, Vector, get_aura_image, tint_greyscale_pixels
 
 # Assets path
-ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
+# ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
+ASSETS_PATH = Path("./assets")
 
 
 class SpriteMixin:
@@ -30,7 +31,8 @@ class SpriteMixin:
 
         if color_tint is not None:
             tinted_texture = tint_greyscale_pixels(texture.image, color_tint, **kwargs)
-            texture = arcade.Texture(str(tinted_texture), tinted_texture)
+            unique_str = str(tinted_texture) + str(uniform(-1e6, 1e6))
+            texture = arcade.Texture(unique_str, tinted_texture)
 
         return texture
 
@@ -137,7 +139,7 @@ class ColorCatTextures(SpriteMixin):
             ),
             begging=[
                 self.load_texture_pair(self.MAIN_TEXTURE_PATH / f"begging{i}.png", self.color_str)
-                for i in (1, 2, 3, 2)
+                for i in (1, 2, 3, 4, 3, 2)
             ],
             getting_hit=self.load_texture_pair(
                 self.MAIN_TEXTURE_PATH / "getting_hit1.png", self.color_str
@@ -457,7 +459,7 @@ class PlayerCat(BasicSprite):
     MAX_LIVES = 5
     N_REQUIRED_FOR_SUPERPOWER = 25
     POUNCE_DURATION = 13  # units?
-    INV_TIME = 1.5
+    INVULNERABILITY_DURATION_s = 1.5
     POUNCE_RECOV = 50  # TODO: units?..
     physics_engine: arcade.PhysicsEnginePlatformer
     texture: arcade.texture.Texture
@@ -469,6 +471,7 @@ class PlayerCat(BasicSprite):
     }
     poof_dict = {color_str: Poof(Vector(0, 0), color_str) for color_str in game.PLAYER_COLORS}
     jump_sound = arcade.load_sound(str(ASSETS_PATH / "sounds" / "jump.wav"))
+    get_hit_sound = arcade.load_sound(str(ASSETS_PATH / "sounds" / "get_hit.wav"))
 
     def __init__(
         self,
@@ -482,6 +485,7 @@ class PlayerCat(BasicSprite):
         state=None,
         ground_height: float = None,
         can_pounce_kill=False,
+        can_swipe=False,
         **kwargs,
     ):
 
@@ -544,6 +548,9 @@ class PlayerCat(BasicSprite):
 
         # Pounce-kill (BlueCat only)
         self.can_pounce_kill = can_pounce_kill
+
+        # Swipe (YellowCat only)
+        self.can_swipe = can_swipe
 
         # Default to face-right
         self.face_direction = game.FACE_RIGHT
@@ -724,7 +731,7 @@ class PlayerCat(BasicSprite):
         self.change_angle = 0
 
         # hit animation
-        if self.hit_timer >= self.INV_TIME * 2 / 3:
+        if self.hit_timer >= self.INVULNERABILITY_DURATION_s * 2 / 3:
             self.change_texture_and_hitbox("getting_hit")
 
         # drop animation (YellowCat)
@@ -753,10 +760,10 @@ class PlayerCat(BasicSprite):
 
         # pounce animation
         elif self.state.pounce.is_pouncing:
-            if self.can_pounce_kill:  # BlueCat
+            if self.can_pounce_kill or self.can_swipe:  # BlueCat and YellowCat
                 self.angle = -self.move_state * 20
                 self.change_texture_and_hitbox("scratching", change_hitbox=True)
-            else:
+            else:  # RedCat
                 self.change_texture_and_hitbox("pouncing", change_hitbox=True)
 
         # air-dash animation (RedCat)
@@ -841,7 +848,7 @@ class PlayerCat(BasicSprite):
                 for i in range(n_jumps):
                     self.physics_engine.increment_jump_counter()
                 # Play the jump sound
-                arcade.play_sound(self.jump_sound)
+                arcade.play_sound(self.jump_sound, volume=0.1)
 
         else:  # RedCat only
             with suppress(AttributeError):
@@ -865,11 +872,13 @@ class PlayerCat(BasicSprite):
     def can_kill_cat(self, cat) -> bool:
         """Doc."""
 
+        did_kill = False
+
         # area kill when dropping (YellowCat)
         if self.state.drop.is_dropping:
             above_ground_height = self.bottom - self.ground_height
             if above_ground_height <= cat.height:
-                did_kill = abs(self.center_x - cat.center_x) < cat.width * abs(self.change_y / 30)
+                did_kill = abs(self.center_x - cat.center_x) < cat.width * abs(self.change_y / 15)
             else:
                 return False
 
@@ -880,17 +889,17 @@ class PlayerCat(BasicSprite):
             self.change_x *= 0.5
             return True
 
+        # pounce-swipe (YellowCat)
+        elif self.can_swipe and self.state.pounce.is_pouncing:
+            if cat.scale * 0.9 < self.scale < cat.scale * 1.1:
+                return True
+
         elif self.state.air_dash.is_dashing:
             return True
 
+        # jump kill
         else:
-            did_kill = (
-                self.change_y < -self.speeds.JUMP / 3
-                and self.center_y > cat.center_y - cat.height * 1 / 3
-                and abs(self.center_x - cat.center_x) < cat.width / 3
-                and self.hit_timer <= self.INV_TIME * 0.9
-                and not (self.state.pounce.is_pouncing or self.state.pounce.finishing_pounce)
-            )
+            did_kill = self.bottom > cat.top - cat.height / 2 and self.hit_timer <= 0
 
             if did_kill:
                 self.change_y = 0
@@ -901,15 +910,18 @@ class PlayerCat(BasicSprite):
     def get_hit(self, cat):
         """Doc."""
 
-        if (
-            abs(self.center_x - cat.center_x) < cat.width / 2
-            and abs(self.center_y - cat.center_y) < cat.height / 2
-        ) and not self.state.drop.is_dropping:
+        if not (
+            self.state.drop.is_dropping
+            or hasattr(self, "air_dash")
+            and self.state.pounce.is_pouncing
+        ):
             if self.lives >= 1 and self.hit_timer <= 0:
                 if self.lives > 1:
-                    self.hit_timer = self.INV_TIME  # seconds?
+                    self.hit_timer = self.INVULNERABILITY_DURATION_s
                     self.change_x = choice([-self.speeds.POUNCE, self.speeds.POUNCE])
+                    self.change_y = uniform(0, self.speeds.POUNCE)
                 self.lives -= 1
+                arcade.play_sound(self.get_hit_sound)
 
     def poof(self):
         """Doc."""
@@ -979,7 +991,7 @@ class RedCat(PlayerCat):
     POUNCE_RECOV = 40  # TODO: units?..
     AIR_DASH_DURATION = 12  # TODO: units?..
 
-    color_str = "red"
+    color_str = "crimson"
 
     def __init__(
         self,
@@ -1007,20 +1019,6 @@ class RedCat(PlayerCat):
             self.air_dash_timer = self.AIR_DASH_DURATION
             self.state.air_dash.direction = self.move_state
 
-    def get_hit(self, cat):
-        """Doc."""
-
-        if (
-            not self.state.pounce.is_pouncing
-            and abs(self.center_x - cat.center_x) < cat.width / 2
-            and abs(self.center_y - cat.center_y) < cat.height / 2
-        ):
-            if self.lives >= 1 and self.hit_timer <= 0:
-                if self.lives > 1:
-                    self.hit_timer = self.INV_TIME  # seconds?
-                    self.change_x = choice([-50, 50])
-                self.lives -= 1
-
 
 class YellowCat(PlayerCat):
     """Doc."""
@@ -1044,6 +1042,7 @@ class YellowCat(PlayerCat):
             aura_color_str="yellow",
             scale=game.CHARACTER_SCALING * 1.1,
             lives=4,
+            can_swipe=True,
             **kwargs,
         )
 
@@ -1052,11 +1051,11 @@ class YellowCat(PlayerCat):
     def drop(self):
         """Doc."""
 
-        above_ground_height = self.center_y - self.ground_height
-        if self.state.is_in_air and above_ground_height > self.height * 1.75:
+        above_ground_height = self.bottom - self.ground_height
+        if self.state.is_in_air and above_ground_height > self.height * 2.5:
             self.state.drop.is_dropping = True
             self.change_x = 0.0
-            self.change_y = -self.speeds.JUMP
+            self.change_y = 0.0
 
 
 class Popsicle(BasicSprite):
@@ -1170,7 +1169,8 @@ class RegularPopsicle(Popsicle):
             self.melting_timer += delta_time
             if self.melting_timer * self.MELT_RATE > 1:
                 try:
-                    self.texture = next(self.melt_textures_iter)
+                    with suppress(IndexError):  # arcade - pop from an empty deque
+                        self.texture = next(self.melt_textures_iter)
                     self.point_value -= int(self.BASE_POINTS * 0.1)
                 except StopIteration:
                     self.kill()

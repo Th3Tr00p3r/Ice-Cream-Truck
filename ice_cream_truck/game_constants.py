@@ -5,7 +5,7 @@ Game Constants
 from helper import ScreenProps, Vector
 
 # General
-COLORS = {"red", "deepskyblue", "lime", "gold", "brown", "white", "mediumpurple", "pink"}
+COLORS = {"crimson", "deepskyblue", "lime", "gold", "brown", "white", "mediumpurple", "pink"}
 DEFAULT_FONT_SIZE = 40
 
 # Physics
@@ -39,7 +39,7 @@ STOP = 0
 # PlayerCat constants
 PLAYER_START_POS = Vector(100, 450)  # pixels from bottom, pixels from left
 N_JUMPS = 2
-PLAYER_COLORS = {"deepskyblue", "red", "gold"}
+PLAYER_COLORS = {"deepskyblue", "crimson", "gold"}
 
 # Ice Cream Truck constants
 TRUCK_START_POS = Vector(750, 305)  # pixels from bottom, pixels from left

@@ -2,6 +2,8 @@
 Ice Cream Truck Game
 """
 
+import os
+import sys
 from contextlib import suppress
 from itertools import cycle
 from pathlib import Path
@@ -24,17 +26,18 @@ from sprites import (
 )
 
 # Assets path
-ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
+# ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
+ASSETS_PATH = Path("./assets")
 
 
 # TODO:
 # Red: superpower is time-stop: many pops are thrown then everything slows down but the player, for a time
 # Yellow: Grows bigger with every popsicle. tramples smaller cats by pouncing. superpower is popsicle magnet for a time
 
-# TODO: Keep 3 best high scores in a pickled dict file (to prevent easy tempering). Replace the scores and re-save the list if needed at the end of every game (ask for player input for name). Show the scores in the title screen.
-# TODO: Add title image and instructions page (only text over milky title image background - same as now) - Z to switch cats, space to jump, Ctrl to activate bonus popsicles,
+# TODO: Show the scores in the title screen: Keep 3 best high scores in a pickled dict file (to prevent easy tempering). Replace the scores and re-save the list if needed at the end of every game (ask for player input for name).
+# TODO: game over screen should show 3 best high scores and let you type in your name if your score is high enough to enter. (only show high scores if high enogh)
 # TODO: add available cat thumbnails to HUD (use big cat images on sprite speadsheet
-# TODO: add sounds (getting hit, killing, competitor grabs popsicle, begging etc.)
+# TODO: add sounds for: competitor grabs popsicle, begging etc.)
 
 
 class GameWindow(arcade.Window):
@@ -66,6 +69,8 @@ class GameWindow(arcade.Window):
 class PlatformerView(arcade.View):
     """Doc."""
 
+    SLOW_TIME_FACTOR = 0.3
+
     def __init__(self) -> None:
         super().__init__()
 
@@ -78,7 +83,7 @@ class PlatformerView(arcade.View):
         self.MAX_PLAYER_LIVES = 5
         self.key_color_dict = {
             arcade.key.B: "deepskyblue",
-            arcade.key.R: "red",
+            arcade.key.R: "crimson",
             arcade.key.Y: "gold",
         }
 
@@ -106,6 +111,10 @@ class PlatformerView(arcade.View):
         # Load up our sounds here
         self.coin_sound = arcade.load_sound(str(ASSETS_PATH / "sounds" / "coin.wav"))
         self.victory_sound = arcade.load_sound(str(ASSETS_PATH / "sounds" / "victory.wav"))
+        self.kill_sound_list = [
+            arcade.load_sound(str(ASSETS_PATH / "sounds" / f"kill{i}.wav")) for i in (1, 2, 3)
+        ]
+        self.kill_sounds_cycler = cycle(self.kill_sound_list)
 
         # Which level are we on?
         self.level = 1
@@ -204,13 +213,15 @@ class PlatformerView(arcade.View):
         self.game_timer = 0.0
         self.game_over_timer = 0.0
         self.score_multiplier_timer = 0.0
+        self.player_switch_timer = 0.0
+        self.slow_time_timer = 0.0
 
     def on_key_press(self, key, modifiers):
         """Called whenever a key is pressed."""
 
         # Switch player cat
         if key == arcade.key.Z:
-            self.switch_player_cat()
+            self.switch_player_cat(is_previous_dead=False)
 
         # Check for player left/right movement
         if key in (arcade.key.LEFT, arcade.key.RIGHT):
@@ -267,6 +278,10 @@ class PlatformerView(arcade.View):
             delta_time -- How much time since the last call
         """
 
+        if self.slow_time_timer > 0:
+            self.slow_time_timer -= delta_time
+            delta_time *= self.SLOW_TIME_FACTOR
+
         # check if player is out of lives, and begin death animation
         if not self.player.lives and self.game_over_timer == 0.0:
             self.player.die()
@@ -295,6 +310,9 @@ class PlatformerView(arcade.View):
         elif self.score_multiplier > 1:
             self.score_multiplier -= 1
             self.score_multiplier_timer = 5
+
+        if self.player_switch_timer > 0.0:
+            self.player_switch_timer -= delta_time
 
         # Update Popsicles
         with suppress(AttributeError):
@@ -340,6 +358,8 @@ class PlatformerView(arcade.View):
 
         # Throw Popsicle
         if (new_popsicle := self.ice_cream_truck.throw_popsicle()) is not None:
+            if new_popsicle.type == "heart":
+                self.slow_time_timer = 2.0
             with suppress(IndexError):
                 self.popsicles.append(new_popsicle)
 
@@ -381,8 +401,6 @@ class PlatformerView(arcade.View):
                         self.player.lives += 1
                     else:
                         self.score += popsicle.point_value * self.score_multiplier
-                    # Play the coin sound
-                    arcade.play_sound(self.coin_sound)
                 else:  # regular
                     # Add the coin score to our score
                     self.score += (
@@ -396,11 +414,13 @@ class PlatformerView(arcade.View):
                     ):
                         self.player.n_favorite_pops_collected += 1
                 # Play the coin sound
-                arcade.play_sound(self.coin_sound)
+                arcade.play_sound(self.coin_sound, volume=0.2)
                 # mark as off-screen (for other cats)
                 popsicle.is_off_screen = True
                 # Remove the popsicle
-                popsicle.kill()
+                with suppress(ValueError):
+                    # arcade - array.remove(x): x not in array
+                    popsicle.kill()
 
         # Check for competitor collisions
         cats_collided_with_player = arcade.check_for_collision_with_list(
@@ -421,6 +441,7 @@ class PlatformerView(arcade.View):
                 if self.player.can_kill_cat(cat):
                     with suppress(ValueError):
                         self.poofs.append(cat.poof())
+                        arcade.play_sound(next(self.kill_sounds_cycler))
                     cat.kill()
                     self.n_cats -= 1
                     self.score_multiplier += 1
@@ -513,23 +534,24 @@ class PlatformerView(arcade.View):
 
         # Draw the score in the upper left
         if self.score != self.last_drawn_score:
-            self.new_score_image = self.get_score_image(self.score)
+            new_score_image = self.get_score_image(self.score)
+            unique_str = str(new_score_image) + str(self.game_timer)
+            self.new_score_texture = arcade.Texture(unique_str, new_score_image)
             self.last_drawn_score = self.score
 
-        with suppress(IndexError):
-            # IndexError - unkonwn cause
-            arcade.draw_texture_rectangle(
-                self.view_left + 120,
-                self.view_bottom + game.SCREEN_PROPS.height - 75,
-                150,
-                75,
-                arcade.Texture(str(self.score), self.new_score_image),
-            )
+        arcade.draw_texture_rectangle(
+            self.view_left + 120,
+            self.view_bottom + game.SCREEN_PROPS.height - 75,
+            150,
+            75,
+            self.new_score_texture,
+        )
 
         # Draw lives HUD in the upper right
         if self.player.lives != self.last_drawn_lives:
             new_lives_image = self.get_lives_hud(self.MAX_PLAYER_LIVES, self.player.lives)
-            self.lives_image = arcade.Texture(str(new_lives_image), new_lives_image)
+            unique_str = str(new_lives_image) + str(self.game_timer)
+            self.lives_texture = arcade.Texture(unique_str, new_lives_image)
             self.last_drawn_lives = self.player.lives
 
         with suppress(IndexError):
@@ -538,12 +560,16 @@ class PlatformerView(arcade.View):
                 self.view_bottom + game.SCREEN_PROPS.height - 50,
                 200,
                 50,
-                self.lives_image,
+                self.lives_texture,
             )
 
         # Draw the score multiplier below the lives HUD
         if self.score_multiplier != self.last_drawn_score_multiplier:
-            self.new_score_multiplier_image = self.get_score_multiplier_image(self.score_multiplier)
+            new_score_multiplier_image = self.get_score_multiplier_image(self.score_multiplier)
+            unique_str = str(new_score_multiplier_image) + str(self.game_timer)
+            self.new_score_multiplier_texture = arcade.Texture(
+                unique_str, new_score_multiplier_image
+            )
             self.last_drawn_score_multiplier = self.score_multiplier
 
         arcade.draw_texture_rectangle(
@@ -551,7 +577,7 @@ class PlatformerView(arcade.View):
             self.view_bottom + game.SCREEN_PROPS.height - 120,
             112.5,
             56.25,
-            arcade.Texture(str(self.new_score_multiplier_image), self.new_score_multiplier_image),
+            self.new_score_multiplier_texture,
         )
 
     def get_score_image(self, score: int):
@@ -579,29 +605,31 @@ class PlatformerView(arcade.View):
             [self.full_heart_image] * n_lives_left + [self.empty_heart_image] * n_lives_lost
         )
 
-    def switch_player_cat(self):
+    def switch_player_cat(self, is_previous_dead=True):
         """Doc."""
 
-        if len(self.player_color_cat_dict) > 0:
-            previous_player = self.player
-            next_player = next(self.player_cat_cycler)
-            if not previous_player == next_player:
-                self.player = next_player
-                self.player.state = previous_player.state
-                self.player.position = previous_player.position
-                self.player.center_y += (
-                    self.player.height
-                )  # to deal with physics engine ground collision
-                self.player.change_x = previous_player.change_x
-                self.player.change_y = previous_player.change_y
-                self.player.angle = previous_player.angle
-                previous_player.position = (0, 0)  # move to safety
-                self.setup_physics_engine(self.physics_engine.jumps_since_ground)
-                if not previous_player.is_alive:
-                    self.player.hit_timer = self.player.INV_TIME
-        else:
-            # TODO: play game over sound
-            self.game_over_timer = 3.0
+        if self.player_switch_timer <= 0 or is_previous_dead:
+            self.player_switch_timer = 0.3
+            if len(self.player_color_cat_dict) > 0:
+                previous_player = self.player
+                next_player = next(self.player_cat_cycler)
+                if not previous_player == next_player:
+                    self.player = next_player
+                    self.player.state = previous_player.state
+                    self.player.position = previous_player.position
+                    self.player.center_y += (
+                        self.player.height
+                    )  # to deal with physics engine ground collision
+                    self.player.change_x = previous_player.change_x
+                    self.player.change_y = previous_player.change_y
+                    self.player.angle = previous_player.angle
+                    previous_player.position = (0, 0)  # move to safety
+                    self.setup_physics_engine(self.physics_engine.jumps_since_ground)
+                    if not previous_player.is_alive:
+                        self.player.hit_timer = self.player.INVULNERABILITY_DURATION_s
+            else:
+                # TODO: play game over sound
+                self.game_over_timer = 3.0
 
     def setup_physics_engine(self, jumps_since_ground=0):
         """Doc."""
@@ -629,6 +657,10 @@ class TitleView(arcade.View):
     def __init__(self) -> None:
         super().__init__()
 
+        # flags
+        self.is_screen_drawn = False
+        self.is_game_ready = False
+
         # Find the title image in the images folder
         title_image_path = ASSETS_PATH / "images" / "title_image.png"
 
@@ -641,17 +673,62 @@ class TitleView(arcade.View):
         # Are we showing the instructions?
         self.show_instructions = False
 
-        # define blinking instructions text
-        self.blinking_text = arcade.Text(
-            "Enter to Start\nI for Instructions",
+        # define texts
+        text_kwargs = dict(
             start_x=0,
-            start_y=game.SCREEN_PROPS.height // 2 - 150,
-            color=arcade.color.INDIGO,
-            font_size=game.DEFAULT_FONT_SIZE,
             font_name="Kenney Pixel Square",
             multiline=True,
             width=game.SCREEN_PROPS.width,
             align="center",
+        )
+
+        self.title_text = arcade.Text(
+            "Ice-Cream Truck",
+            start_y=game.SCREEN_PROPS.height - 150,
+            color=arcade.color.MAGENTA,
+            font_size=game.DEFAULT_FONT_SIZE + 15,
+            **text_kwargs,
+        )
+
+        self.title_shade = arcade.Text(
+            " Ice-Cream Truck",
+            start_y=game.SCREEN_PROPS.height - 156,
+            color=arcade.color.WHITE,
+            font_size=game.DEFAULT_FONT_SIZE + 15,
+            **text_kwargs,
+        )
+
+        # define blinking text
+        self.blinking_text = arcade.Text(
+            "'Enter' to Start\n'I' for Instructions\n'Esc' to quit",
+            start_y=game.SCREEN_PROPS.height // 2 - 220,
+            color=arcade.color.MAGENTA,
+            font_size=game.DEFAULT_FONT_SIZE - 10,
+            **text_kwargs,
+        )
+
+        self.blinking_shade = arcade.Text(
+            " 'Enter' to Start\n 'I' for Instructions\n 'Esc' to quit",
+            start_y=game.SCREEN_PROPS.height // 2 - 226,
+            color=arcade.color.WHITE,
+            font_size=game.DEFAULT_FONT_SIZE - 10,
+            **text_kwargs,
+        )
+
+        self.loading_text = arcade.Text(
+            "Loading...",
+            start_y=game.SCREEN_PROPS.height // 2 - 250,
+            color=arcade.color.MAGENTA,
+            font_size=game.DEFAULT_FONT_SIZE,
+            **text_kwargs,
+        )
+
+        self.loading_shade = arcade.Text(
+            " Loading...",
+            start_y=game.SCREEN_PROPS.height // 2 - 256,
+            color=arcade.color.WHITE,
+            font_size=game.DEFAULT_FONT_SIZE,
+            **text_kwargs,
         )
 
         self.game_view = PlatformerView()
@@ -662,6 +739,11 @@ class TitleView(arcade.View):
         Arguments:
             delta_time -- time passed since last update
         """
+
+        # setup the game before starting (but after title screen is drawn)
+        if not self.is_game_ready and self.is_screen_drawn:
+            self.game_view.setup()
+            self.is_game_ready = True
 
         # First, count down the time
         self.display_timer -= delta_time
@@ -685,9 +767,21 @@ class TitleView(arcade.View):
             texture=self.title_image,
         )
 
+        # draw title text
+        self.title_shade.draw()
+        self.title_text.draw()
+
+        # show 'laoding' while setting up the game
+        if not self.is_game_ready:
+            self.loading_shade.draw()
+            self.loading_text.draw()
+
         # Should we show our instructions?
         if self.show_instructions:
+            self.blinking_shade.draw()
             self.blinking_text.draw()
+
+        self.is_screen_drawn = True
 
     def on_key_press(self, key: int, modifiers: int) -> None:
         """Resume the game when the user presses ESC again
@@ -696,13 +790,16 @@ class TitleView(arcade.View):
             key -- Which key was pressed
             modifiers -- What modifiers were active
         """
+
         if not modifiers & arcade.key.MOD_ALT and key == arcade.key.RETURN:
-            self.game_view.setup()
             self.window.show_view(self.game_view)
 
         elif key == arcade.key.I:
             instructions_view = InstructionsView()
             self.window.show_view(instructions_view)
+
+        elif key == arcade.key.ESCAPE:
+            self.window.close()
 
 
 class InstructionsView(arcade.View):
@@ -718,6 +815,30 @@ class InstructionsView(arcade.View):
         # Load our title image
         self.instructions_image = arcade.load_texture(instructions_image_path)
 
+        self.text_list = [
+            arcade.Text(
+                "Instructions / Keys",
+                start_x=0,
+                start_y=game.SCREEN_PROPS.height - 150,
+                color=arcade.color.BLACK,
+                font_size=game.DEFAULT_FONT_SIZE + 5,
+                font_name="Kenney Pixel Square",
+                width=game.SCREEN_PROPS.width,
+                align="center",
+            ),
+            arcade.Text(
+                "Move - LEFT/RIGHT\nJump - SPACE\nPounce - DOWN (running at full speed)\nSwitch Cat: Z\nSuper Power - lCtrl\n\nCollect as many popsicles as you can!",
+                start_x=100,
+                start_y=game.SCREEN_PROPS.height - 300,
+                color=arcade.color.BLACK,
+                font_size=game.DEFAULT_FONT_SIZE - 10,
+                font_name="Kenney Pixel Square",
+                width=game.SCREEN_PROPS.width,
+                align="left",
+                multiline=True,
+            ),
+        ]
+
     def on_draw(self) -> None:
         # Start the rendering loop
         arcade.start_render()
@@ -727,6 +848,19 @@ class InstructionsView(arcade.View):
             **game.SCREEN_PROPS.as_dict(),
             texture=self.instructions_image,
         )
+
+        # cover the image in semitransparent white
+        arcade.draw_lrtb_rectangle_filled(
+            left=0,
+            right=game.SCREEN_PROPS.width,
+            top=game.SCREEN_PROPS.height,
+            bottom=0,
+            color=arcade.make_transparent_color(arcade.color.WHITE, transparency=200),
+        )
+
+        # draw text
+        for text in self.text_list:
+            text.draw()
 
     def on_key_press(self, key: int, modifiers: int) -> None:
         """Start the game when the user presses Enter
@@ -760,16 +894,28 @@ class PauseView(arcade.View):
         self.fill_color = arcade.make_transparent_color(arcade.color.WHITE, transparency=150)
 
         # define pause text
-        self.pause_text = arcade.Text(
-            "PAUSED\nPRESS 'P' OR 'Esc' TO CONTINUE",
+        text_kwargs = dict(
             start_x=0,
-            start_y=game.SCREEN_PROPS.height // 2,
-            color=arcade.color.INDIGO,
-            font_size=game.DEFAULT_FONT_SIZE,
             font_name="Kenney Pixel Square",
             multiline=True,
             width=game.SCREEN_PROPS.width,
             align="center",
+        )
+
+        self.pause_text = arcade.Text(
+            "PAUSED\nPRESS 'P' OR 'Esc' TO CONTINUE",
+            start_y=game.SCREEN_PROPS.height // 2,
+            color=arcade.color.MAGENTA,
+            font_size=game.DEFAULT_FONT_SIZE,
+            **text_kwargs,
+        )
+
+        self.pause_shade = arcade.Text(
+            " PAUSED\n PRESS 'P' OR 'Esc' TO CONTINUE",
+            start_y=game.SCREEN_PROPS.height // 2 - 6,
+            color=arcade.color.WHITE,
+            font_size=game.DEFAULT_FONT_SIZE,
+            **text_kwargs,
         )
 
     def on_draw(self) -> None:
@@ -789,6 +935,7 @@ class PauseView(arcade.View):
             color=self.fill_color,
         )
 
+        self.pause_shade.draw()
         self.pause_text.draw()
 
     def on_key_press(self, key: int, modifiers: int) -> None:
@@ -817,16 +964,28 @@ class GameOverView(arcade.View):
         self.fill_color = arcade.make_transparent_color(arcade.color.WHITE, transparency=150)
 
         # define text
-        self.game_over_text = arcade.Text(
-            "Game Over!\n'Enter' to restart\n'Esc' to exit",
+        text_kwargs = dict(
             start_x=0,
-            start_y=game.SCREEN_PROPS.height // 2,
-            color=arcade.color.INDIGO,
-            font_size=game.DEFAULT_FONT_SIZE,
             font_name="Kenney Pixel Square",
             multiline=True,
             width=game.SCREEN_PROPS.width,
             align="center",
+        )
+
+        self.game_over_text = arcade.Text(
+            "Game Over!\n'Enter' to restart\n'Esc' to exit",
+            start_y=game.SCREEN_PROPS.height // 2,
+            color=arcade.color.MAGENTA,
+            font_size=game.DEFAULT_FONT_SIZE,
+            **text_kwargs,
+        )
+
+        self.game_over_shade = arcade.Text(
+            " Game Over!\n 'Enter' to restart\n 'Esc' to exit",
+            start_y=game.SCREEN_PROPS.height // 2 - 6,
+            color=arcade.color.WHITE,
+            font_size=game.DEFAULT_FONT_SIZE,
+            **text_kwargs,
         )
 
     def on_draw(self) -> None:
@@ -847,6 +1006,7 @@ class GameOverView(arcade.View):
         )
 
         # Now show the game over text
+        self.game_over_shade.draw()
         self.game_over_text.draw()
 
     def on_key_press(self, key: int, modifiers: int) -> None:
@@ -866,5 +1026,10 @@ class GameOverView(arcade.View):
 
 
 if __name__ == "__main__":
+
+    # for PyInstaller
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        os.chdir(sys._MEIPASS)  # type: ignore
+
     GameWindow()
     arcade.run()

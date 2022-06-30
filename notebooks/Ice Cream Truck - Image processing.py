@@ -15,10 +15,9 @@
 # %% [markdown]
 # General imports and definitions:
 
-import numpy as np
-
 # %%
 from PIL import Image, ImageColor
+import numpy as np
 
 
 def tint_greyscale_pixels(
@@ -53,6 +52,160 @@ def tint_greyscale_pixels(
 
     return Image.fromarray(img_arr.astype(np.uint8))
 
+
+# %% [markdown]
+# # Creating the Title Image
+
+# %% [markdown]
+# imports
+
+# %%
+from PIL import Image, ImageOps, ImageEnhance, ImageMorph
+from pathlib import Path
+from random import choice, uniform, gauss
+
+# %% [markdown]
+# We'll be using popsicles and big cats (over some simple background). We'll need blue, red and yellow cats, and popsicles of "all colors":
+
+# %%
+MAIN_IMAGES_PATH = Path("D:/MEGA/Programming/games/ice_cream_truck/assets/images")
+
+
+big_black_cat_img = Image.open(MAIN_IMAGES_PATH / "cat" / "big_tile_image1.png")
+player_colors = ("deepskyblue", "crimson", "gold")
+cat_img_dict = {color: tint_greyscale_pixels(big_black_cat_img, color) for color in player_colors}
+
+white_pop_img = Image.open(MAIN_IMAGES_PATH / "items" / "popsicleWhite.png")
+popsicle_colors = ("darkturquoise", "crimson", "darkgoldenrod")
+pop_img_dict = {
+    color: tint_greyscale_pixels(
+        white_pop_img,
+        color,
+        should_tint_black=False,
+        threshold_deviation_from_grey=10,
+        linear_beta=(0, 1),
+    )
+    for color in popsicle_colors
+}
+
+# TEST
+for key, val in cat_img_dict.items():
+    print(key)
+    display(val)
+
+for key, val in pop_img_dict.items():
+    print(key)
+    display(val)
+
+# %% [markdown]
+# Now, lets create a uniform background image of the right size, and fill it with the above images.
+#
+# First, create a large image of solid background color, and fill it with popsicles:
+
+# %%
+# create large background image
+bg_image = Image.new("RGBA", (1600, 800), (193, 254, 255))
+
+# place the popsicles, randomly:
+n_pops = int(1e4)
+for i in range(n_pops):
+    new_pop = pop_img_dict[choice(popsicle_colors)].rotate(uniform(0, 360), expand=True)
+    new_pop = ImageOps.scale(new_pop, uniform(0.3, 1))
+    w_pop, h_pop = new_pop.size
+    w, h = bg_image.size
+    w_center, h_center = (w - w_pop) / 2, (h - h_pop) / 2
+    w_pos = -1
+    h_pos = -1
+    while w_pos < 0 or w_pos > w - w_pop:
+        w_pos = int(uniform(0, w - w_pop))
+    while h_pos < 0 or h_pos > h - h_pop:
+        h_pos = int(uniform(0, w - h_pop))
+
+    bg_image.alpha_composite(new_pop, dest=(w_pos, h_pos))
+
+# TEST
+display(bg_image)
+
+# %% [markdown]
+# Reduce the brightness so that the cats will stand out
+
+# %%
+enhancer = ImageEnhance.Brightness(bg_image)
+
+factor = 10
+bright_bg_image = enhancer.enhance(factor)
+
+# should_save = True
+should_save = False
+
+if should_save:
+    bright_bg_image.save(MAIN_IMAGES_PATH / "instructions_image.png")
+    print(f"saved as {MAIN_IMAGES_PATH / 'instructions_image.png'}")
+
+# TEST
+display(bright_bg_image)
+
+
+# %% [markdown]
+# Place the cats on top:
+
+# %%
+def get_aura_image(img, color_str):
+    """Takes an input PIL image and adds an 'aura' effect to it in chosen color"""
+
+    _, _, _, alpha_chan = img.split()
+
+    dilate_op = ImageMorph.MorphOp(op_name="dilation8")
+    _, dilated_alpha_chan = dilate_op.apply(alpha_chan)
+    _, dilated_alpha_chan = dilate_op.apply(dilated_alpha_chan)
+    _, dilated_alpha_chan = dilate_op.apply(dilated_alpha_chan)
+
+    white_aura_img = dilated_alpha_chan.convert("RGBA")
+    white_aura_img.putalpha(dilated_alpha_chan)
+
+    blue_aura_img = tint_greyscale_pixels(
+        white_aura_img,
+        color_str,
+        should_tint_black=False,
+        threshold_deviation_from_grey=10,
+        linear_beta=(0, 1),
+    )
+
+    return Image.alpha_composite(blue_aura_img, img)
+
+
+# %%
+title_image = bright_bg_image.copy()
+
+f = 0.9
+blue_cat_img = get_aura_image(
+    ImageOps.scale(cat_img_dict["deepskyblue"], 2 * f).rotate(-20, expand=True), "black"
+)
+red_cat_img = get_aura_image(
+    ImageOps.scale(cat_img_dict["crimson"], 1.6 * f).rotate(-30, expand=True), "black"
+)
+yellow_cat_img = get_aura_image(
+    ImageOps.scale(cat_img_dict["gold"], 2.4 * f).rotate(10, expand=True), "black"
+)
+
+title_image.alpha_composite(yellow_cat_img, dest=(520, 210))
+title_image.alpha_composite(red_cat_img, dest=(700, 170))
+title_image.alpha_composite(blue_cat_img, dest=(700, 290))
+
+
+# TEST
+display(title_image)
+
+# %% [markdown]
+# save it:
+
+# %%
+# should_save = True
+should_save = False
+
+if should_save:
+    title_image.save(MAIN_IMAGES_PATH / "title_image.png")
+    print(f"saved as {MAIN_IMAGES_PATH / 'title_image.png'}")
 
 # %% [markdown]
 # # Extracting Sprites from Spritesheet
@@ -283,6 +436,7 @@ my_sprite_idxs = [
     115,
     116,
     117,
+    92,
     118,
     119,
     120,
@@ -306,7 +460,7 @@ actions = [
     ("scratching", 1),
     ("dropping", 2),
     ("getting_hit", 1),
-    ("begging", 3),
+    ("begging", 4),
     ("screaming", 3),
     ("big_tile_image", 1),
 ]
@@ -323,7 +477,7 @@ for name, sprite_img in zip(name_list, my_sprites):
         sprite_name_dict[name] = [sprite_img]
 
 # TEST
-[display(img) for img in sprite_name_dict["running"]]
+[display(img) for img in sprite_name_dict["begging"]]
 
 # %% [markdown]
 # And finally, we save the sprites:
@@ -346,7 +500,7 @@ for name, img_list in sprite_name_dict.items():
 # %%
 from pathlib import Path
 
-from PIL import ImageChops, ImageEnhance, ImageMath, ImageMorph
+from PIL import ImageChops, ImageEnhance
 
 # %% [markdown]
 # get image of blue cat:
@@ -394,47 +548,15 @@ aura_img = Image.alpha_composite(blue_aura_img, img)
 # test
 display(aura_img)
 
-
-# %% [markdown]
-# As a function:
-
-# %%
-def get_aura_image(img, color_str):
-    """Takes an input PIL image and adds an 'aura' effect to it in chosen color"""
-
-    _, _, _, alpha_chan = img.split()
-
-    dilate_op = ImageMorph.MorphOp(op_name="dilation8")
-    _, dilated_alpha_chan = dilate_op.apply(alpha_chan)
-    _, dilated_alpha_chan = dilate_op.apply(dilated_alpha_chan)
-    _, dilated_alpha_chan = dilate_op.apply(dilated_alpha_chan)
-
-    white_aura_img = dilated_alpha_chan.convert("RGBA")
-    white_aura_img.putalpha(dilated_alpha_chan)
-
-    blue_aura_img = tint_greyscale_pixels(
-        white_aura_img,
-        color_str,
-        should_tint_black=False,
-        threshold_deviation_from_grey=10,
-        linear_beta=(0, 1),
-    )
-
-    return Image.alpha_composite(blue_aura_img, img)
-
-
-# test
-get_aura_image(img, "red")
-
 # %% [markdown]
 # # Creating a "Heart Popsicle"
 
 # %% [markdown]
 # imports
-
-from pathlib import Path
-
-import numpy as np
+#
+# from pathlib import Path
+#
+# import numpy as np
 
 # %%
 from PIL import Image, ImageColor, ImageDraw, ImageFilter, ImageMorph, ImageOps
@@ -555,10 +677,10 @@ display(heart_popsicle)
 
 # %% [markdown]
 # imports
-
-from pathlib import Path
-
-import numpy as np
+#
+# from pathlib import Path
+#
+# import numpy as np
 
 # %%
 from PIL import Image, ImageColor, ImageDraw, ImageFilter, ImageMorph, ImageOps
@@ -642,10 +764,10 @@ for img in red_pop_melting_images:
 
 # %% [markdown]
 # imports
-
-from pathlib import Path
-
-import numpy as np
+#
+# from pathlib import Path
+#
+# import numpy as np
 
 # %%
 from PIL import Image, ImageColor, ImageDraw, ImageFilter, ImageMorph, ImageOps
@@ -683,13 +805,12 @@ for color in ["red", "dodgerblue", "lime", "yellow", "brown", "white", "mediumpu
 # %% [markdown]
 # Imports:
 
+# %%
+from PIL import Image, ImageDraw, ImageFilter, ImageMorph, ImageOps
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-
-# %%
-from PIL import Image, ImageDraw, ImageFilter, ImageMorph, ImageOps
 
 MAIN_PATH = Path("D:/MEGA/Programming/games/ice_cream_truck/assets/images/gifs/")
 GIF_PATH = MAIN_PATH / "poof.gif"
@@ -777,7 +898,7 @@ for idx, frame in enumerate(filled_filtered_frames):
     if idx > 3:
         ImageDraw.floodfill(frame.image, center_xy, (0, 0, 0, 0), thresh=thresh)
 
-# test
+# TEST
 test_frames = deepcopy(filtered_frames)
 thresh = 50
 for idx, frame in enumerate(test_frames):
@@ -819,13 +940,13 @@ for idx, frame in enumerate(filled_filtered_frames):
 
 # %% [markdown]
 # Imports and general definitions
-
-import os
-from contextlib import contextmanager
-from pathlib import Path
-from types import SimpleNamespace
-
-import numpy as np
+#
+# import os
+# from contextlib import contextmanager
+# from pathlib import Path
+# from types import SimpleNamespace
+#
+# import numpy as np
 
 # %%
 from PIL import Image, ImageChops, ImageColor
@@ -852,13 +973,13 @@ get_lives_hud(3, 3)
 
 # %% [markdown]
 # Imports and general definitions
-
-import os
-from contextlib import contextmanager
-from pathlib import Path
-from types import SimpleNamespace
-
-import numpy as np
+#
+# import os
+# from contextlib import contextmanager
+# from pathlib import Path
+# from types import SimpleNamespace
+#
+# import numpy as np
 
 # %%
 from PIL import Image, ImageChops, ImageColor
@@ -955,7 +1076,7 @@ from pathlib import Path
 
 # %%
 IMAGE_DIR_PATH = Path("D:/MEGA/Programming/games/ice_cream_truck/assets/images/cat")
-color = "darkgrey"
+color = "gold"
 
 for img_path in IMAGE_DIR_PATH.glob("*.png"):
     display(tint_greyscale_pixels(Image.open(img_path), color))

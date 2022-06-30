@@ -293,7 +293,7 @@ def tint_greyscale_pixels(
 
 
 def crop_resize_concat_horizontally(im_list, resample=PIL.Image.BOX):
-    # Adapted from: https://note.nkmk.me/en/python-pillow-concat-images/
+    """ "Adapted from: https://note.nkmk.me/en/python-pillow-concat-images/"""
 
     cropped_img_list = [img.crop(img.getbbox()) for img in im_list]
     min_height = min(im.height for im in cropped_img_list)
