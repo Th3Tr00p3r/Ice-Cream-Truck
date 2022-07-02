@@ -2,11 +2,17 @@
 Game Constants
 """
 
+import arcade
 from helper import ScreenProps, Vector
+
+# Paths and filenames
+HIGH_SCORES_FILENAME = "ice_cream_truck_high_scores"
 
 # General
 COLORS = {"crimson", "deepskyblue", "lime", "gold", "brown", "white", "mediumpurple", "pink"}
 DEFAULT_FONT_SIZE = 40
+ANY_KEY = [key for key in arcade.key.__dict__.values() if isinstance(key, int)]
+KEY_STR_DICT = {key: char for key, char in zip(range(97, 122 + 1), "ABCDEFGHIJKLMNOPQRSTUVWXYZ")}
 
 # Physics
 GRAVITY = 1.0

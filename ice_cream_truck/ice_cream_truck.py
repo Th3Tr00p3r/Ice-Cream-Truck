@@ -14,7 +14,12 @@ from typing import Dict, Union
 import arcade
 import game_constants as game
 import PIL
-from helper import Vector, crop_resize_concat_horizontally
+from helper import (
+    Vector,
+    crop_resize_concat_horizontally,
+    load_high_scores,
+    save_high_scores,
+)
 from sprites import (
     BlueCat,
     CompetitorCat,
@@ -26,7 +31,6 @@ from sprites import (
 )
 
 # Assets path
-# ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
 ASSETS_PATH = Path("./assets")
 
 
@@ -34,8 +38,6 @@ ASSETS_PATH = Path("./assets")
 # Red: superpower is time-stop: many pops are thrown then everything slows down but the player, for a time
 # Yellow: Grows bigger with every popsicle. tramples smaller cats by pouncing. superpower is popsicle magnet for a time
 
-# TODO: Show the scores in the title screen: Keep 3 best high scores in a pickled dict file (to prevent easy tempering). Replace the scores and re-save the list if needed at the end of every game (ask for player input for name).
-# TODO: game over screen should show 3 best high scores and let you type in your name if your score is high enough to enter. (only show high scores if high enogh)
 # TODO: add available cat thumbnails to HUD (use big cat images on sprite speadsheet
 # TODO: add sounds for: getting killed, competitor grabs popsicle, begging etc.
 # TODO: build the cats' house and the ice cream truck using free Kenney parts and PIL
@@ -129,6 +131,9 @@ class PlatformerView(arcade.View):
 
     def setup(self) -> None:
         """Sets up the game for the current level"""
+
+        # get current highscores
+        self.high_scores_list = load_high_scores()
 
         # Get the current map based on the level
         map_name = f"Ice_cream_truck_level_{self.level:02}.json"
@@ -296,7 +301,11 @@ class PlatformerView(arcade.View):
         if self.game_over_timer > 0:
             self.game_over_timer -= delta_time
         elif not self.player.is_alive:
-            self.window.show_view(GameOverView(self))
+            _, current_scores_list = zip(*self.high_scores_list)
+            if self.score > min(current_scores_list):
+                self.window.show_view(NewHighScoreView(self))
+            else:
+                self.window.show_view(GameOverView(self))
 
         # timers
         self.game_timer += delta_time
@@ -701,18 +710,18 @@ class TitleView(arcade.View):
 
         # define blinking text
         self.blinking_text = arcade.Text(
-            "'Enter' to Start\n'I' for Instructions\n'Esc' to quit",
-            start_y=game.SCREEN_PROPS.height // 2 - 220,
+            "'Enter' to Start\n'H' for High Scores\n'I' for Instructions\n'Esc' to quit",
+            start_y=game.SCREEN_PROPS.height // 2 - 200,
             color=arcade.color.MAGENTA,
-            font_size=game.DEFAULT_FONT_SIZE - 10,
+            font_size=game.DEFAULT_FONT_SIZE - 15,
             **text_kwargs,
         )
 
         self.blinking_shade = arcade.Text(
-            " 'Enter' to Start\n 'I' for Instructions\n 'Esc' to quit",
-            start_y=game.SCREEN_PROPS.height // 2 - 226,
+            " 'Enter' to Start\n 'H' for High Scores\n 'I' for Instructions\n 'Esc' to quit",
+            start_y=game.SCREEN_PROPS.height // 2 - 206,
             color=arcade.color.WHITE,
-            font_size=game.DEFAULT_FONT_SIZE - 10,
+            font_size=game.DEFAULT_FONT_SIZE - 15,
             **text_kwargs,
         )
 
@@ -796,8 +805,10 @@ class TitleView(arcade.View):
             self.window.show_view(self.game_view)
 
         elif key == arcade.key.I:
-            instructions_view = InstructionsView()
-            self.window.show_view(instructions_view)
+            self.window.show_view(InstructionsView(self))
+
+        elif key == arcade.key.H:
+            self.window.show_view(HighScoresView(self))
 
         elif key == arcade.key.ESCAPE:
             self.window.close()
@@ -806,9 +817,11 @@ class TitleView(arcade.View):
 class InstructionsView(arcade.View):
     """Show instructions to the player"""
 
-    def __init__(self) -> None:
+    def __init__(self, title_view) -> None:
         """Create instructions screen"""
         super().__init__()
+
+        self.title_view = title_view
 
         # Find the instructions image in the image folder
         instructions_image_path = ASSETS_PATH / "images" / "instructions_image.png"
@@ -864,20 +877,23 @@ class InstructionsView(arcade.View):
             text.draw()
 
     def on_key_press(self, key: int, modifiers: int) -> None:
-        """Start the game when the user presses Enter
 
-        Arguments:
-            key -- Which key was pressed
-            modifiers -- What modifiers were active
-        """
-        if key == arcade.key.RETURN:
-            game_view = PlatformerView()
-            game_view.setup()
-            self.window.show_view(game_view)
+        if key in game.ANY_KEY:
+            self.window.show_view(self.title_view)
 
-        elif key == arcade.key.ESCAPE:
-            title_view = TitleView()
-            self.window.show_view(title_view)
+
+class HighScoresView(arcade.View):
+    def __init__(self, title_view) -> None:
+        """Create high-scores screen"""
+        super().__init__()
+
+        self.title_view = title_view
+        self.high_scores_list = load_high_scores()
+
+    def on_key_press(self, key: int, modifiers: int) -> None:
+
+        if key in game.ANY_KEY:
+            self.window.show_view(self.title_view)
 
 
 class PauseView(arcade.View):
@@ -964,7 +980,10 @@ class GameOverView(arcade.View):
         # Store a semi-transparent color to use as an overlay
         self.fill_color = arcade.make_transparent_color(arcade.color.WHITE, transparency=150)
 
-        # define text
+        # define texts
+        name_score_str_list = [
+            f"{name} - {score}" for idx, (name, score) in enumerate(self.game_view.high_scores_list)
+        ]
         text_kwargs = dict(
             start_x=0,
             font_name="Kenney Pixel Square",
@@ -972,22 +991,50 @@ class GameOverView(arcade.View):
             width=game.SCREEN_PROPS.width,
             align="center",
         )
-
-        self.game_over_text = arcade.Text(
-            "Game Over!\n'Enter' to restart\n'Esc' to exit",
-            start_y=game.SCREEN_PROPS.height // 2,
-            color=arcade.color.MAGENTA,
-            font_size=game.DEFAULT_FONT_SIZE,
-            **text_kwargs,
-        )
-
-        self.game_over_shade = arcade.Text(
-            " Game Over!\n 'Enter' to restart\n 'Esc' to exit",
-            start_y=game.SCREEN_PROPS.height // 2 - 6,
-            color=arcade.color.WHITE,
-            font_size=game.DEFAULT_FONT_SIZE,
-            **text_kwargs,
-        )
+        self.text_list = [
+            arcade.Text(
+                "Game Over!",
+                start_y=game.SCREEN_PROPS.height - 150,
+                color=arcade.color.MAGENTA,
+                font_size=game.DEFAULT_FONT_SIZE + 15,
+                **text_kwargs,
+            ),
+            arcade.Text(
+                " Game Over!",
+                start_y=game.SCREEN_PROPS.height - 156,
+                color=arcade.color.WHITE,
+                font_size=game.DEFAULT_FONT_SIZE + 15,
+                **text_kwargs,
+            ),
+            arcade.Text(
+                "High Scores:\n" + "\n".join(name_score_str_list),
+                start_y=game.SCREEN_PROPS.height - 300,
+                color=arcade.color.BLACK,
+                font_size=game.DEFAULT_FONT_SIZE,
+                **text_kwargs,
+            ),
+            arcade.Text(
+                " High Scores:\n" + "\n".join([f" {str_}" for str_ in name_score_str_list]),
+                start_y=game.SCREEN_PROPS.height - 306,
+                color=arcade.color.MAGENTA,
+                font_size=game.DEFAULT_FONT_SIZE,
+                **text_kwargs,
+            ),
+            arcade.Text(
+                "'Enter' to restart\n'Esc' to exit",
+                start_y=game.SCREEN_PROPS.height - 700,
+                color=arcade.color.MAGENTA,
+                font_size=game.DEFAULT_FONT_SIZE - 15,
+                **text_kwargs,
+            ),
+            arcade.Text(
+                " 'Enter' to restart\n 'Esc' to exit",
+                start_y=game.SCREEN_PROPS.height - 706,
+                color=arcade.color.WHITE,
+                font_size=game.DEFAULT_FONT_SIZE - 15,
+                **text_kwargs,
+            ),
+        ]
 
     def on_draw(self) -> None:
         """Draw the underlying screen, blurred, then the game over text"""
@@ -1007,8 +1054,8 @@ class GameOverView(arcade.View):
         )
 
         # Now show the game over text
-        self.game_over_shade.draw()
-        self.game_over_text.draw()
+        for text in self.text_list:
+            text.draw()
 
     def on_key_press(self, key: int, modifiers: int) -> None:
         """Restart the current level when the user presses Enter
@@ -1017,6 +1064,7 @@ class GameOverView(arcade.View):
             key -- Which key was pressed
             modifiers -- What modifiers were active
         """
+
         if key == arcade.key.RETURN:
             # Reset the current level
             self.game_view.setup()
@@ -1024,6 +1072,151 @@ class GameOverView(arcade.View):
 
         elif key == arcade.key.ESCAPE:
             self.window.close()
+
+
+class NewHighScoreView(arcade.View):
+    """Shown when the player sets a new highscore"""
+
+    def __init__(self, game_view: arcade.View) -> None:
+        """Create the game over screen"""
+        # Initialize the parent
+        super().__init__()
+
+        # Store a reference to the underlying view
+        self.game_view = game_view
+
+        # Store a semi-transparent color to use as an overlay
+        self.fill_color = arcade.make_transparent_color(arcade.color.WHITE, transparency=150)
+
+        # keep the current score list and the new score
+        self.new_score = game_view.score
+        self.new_name = ""
+
+        # define texts
+        self.text_kwargs = dict(
+            start_x=0,
+            font_name="Kenney Pixel Square",
+            multiline=True,
+            width=game.SCREEN_PROPS.width,
+            align="center",
+        )
+        self.text_list = [
+            arcade.Text(
+                "New High Score Set!",
+                start_y=game.SCREEN_PROPS.height - 150,
+                color=arcade.color.MAGENTA,
+                font_size=game.DEFAULT_FONT_SIZE + 15,
+                **self.text_kwargs,
+            ),
+            arcade.Text(
+                " New High Score Set!",
+                start_y=game.SCREEN_PROPS.height - 156,
+                color=arcade.color.WHITE,
+                font_size=game.DEFAULT_FONT_SIZE + 15,
+                **self.text_kwargs,
+            ),
+            arcade.Text(
+                "Please Type in your name (up to 5 characters):",
+                start_y=game.SCREEN_PROPS.height - 250,
+                color=arcade.color.MAGENTA,
+                font_size=game.DEFAULT_FONT_SIZE - 10,
+                **self.text_kwargs,
+            ),
+            arcade.Text(
+                " Please Type in your name (up to 5 characters):",
+                start_y=game.SCREEN_PROPS.height - 256,
+                color=arcade.color.WHITE,
+                font_size=game.DEFAULT_FONT_SIZE - 10,
+                **self.text_kwargs,
+            ),
+            0,
+            0,
+        ]
+
+        self.update_name()
+
+    def on_key_press(self, key: int, modifiers: int) -> None:
+        """Restart the current level when the user presses Enter
+
+        Arguments:
+            key -- Which key was pressed
+            modifiers -- What modifiers were active
+        """
+
+        if key == arcade.key.RETURN:
+            self.update_high_scores()
+            self.window.show_view(GameOverView(self.game_view))
+
+        elif key == arcade.key.ESCAPE:
+            self.new_name = ""
+            self.update_high_scores()
+            self.window.show_view(GameOverView(self.game_view))
+
+        elif key in range(97, 122 + 1):  # key is in A-Z
+            if len(self.new_name) < 5:
+                self.new_name += game.KEY_STR_DICT[key]
+                self.update_name()
+
+        elif key == arcade.key.BACKSPACE:
+            self.new_name = self.new_name[:-1]
+            self.update_name()
+
+    def on_draw(self) -> None:
+        """Draw the underlying screen, blurred, then the game over text"""
+
+        # First, draw the underlying view
+        # This also calls start_render(), so no need to do it again
+        self.game_view.on_draw()
+
+        # Now create a filled rect that covers the current viewport
+        # We get the viewport size from the game view
+        arcade.draw_lrtb_rectangle_filled(
+            left=self.game_view.view_left,
+            right=self.game_view.view_left + game.SCREEN_PROPS.width,
+            top=self.game_view.view_bottom + game.SCREEN_PROPS.height,
+            bottom=self.game_view.view_bottom,
+            color=self.fill_color,
+        )
+
+        # Now show the game over text
+        for text in self.text_list:
+            text.draw()
+
+    def update_name(self):
+        """Doc."""
+
+        name_text = arcade.Text(
+            self.new_name,
+            start_y=game.SCREEN_PROPS.height - 400,
+            color=arcade.color.BLACK,
+            font_size=game.DEFAULT_FONT_SIZE,
+            **self.text_kwargs,
+        )
+        name_shade = arcade.Text(
+            f" {self.new_name}",
+            start_y=game.SCREEN_PROPS.height - 406,
+            color=arcade.color.MAGENTA,
+            font_size=game.DEFAULT_FONT_SIZE,
+            **self.text_kwargs,
+        )
+
+        self.text_list = self.text_list[:-2] + [name_text, name_shade]
+
+    def update_high_scores(self):
+        """Doc."""
+
+        current_names, current_scores = zip(*self.game_view.high_scores_list)
+
+        scores = list(current_scores) + [self.new_score]
+        names = list(current_names) + [self.new_name]
+
+        new_high_score_list = [
+            (name, score) for score, name in sorted(zip(scores, names), reverse=True)[:3]
+        ]
+
+        # save to file and update current game highscore (avoid re-loading file)
+        save_high_scores(new_high_score_list)
+        self.game_view.high_scores_list = new_high_score_list
 
 
 if __name__ == "__main__":

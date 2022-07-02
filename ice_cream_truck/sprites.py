@@ -12,7 +12,6 @@ import PIL
 from helper import Limits, Vector, get_aura_image, tint_greyscale_pixels
 
 # Assets path
-# ASSETS_PATH = Path(__file__).resolve().parent.parent / "assets"
 ASSETS_PATH = Path("./assets")
 
 

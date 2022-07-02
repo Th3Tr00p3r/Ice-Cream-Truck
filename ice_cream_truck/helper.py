@@ -2,10 +2,12 @@
 Helper Module
 """
 
+import pickle
 from contextlib import suppress
 from dataclasses import asdict, dataclass, field
-from typing import Any, Tuple
+from typing import Any, List, Tuple
 
+import game_constants as game
 import numpy as np
 import PIL
 import PIL.ImageMorph
@@ -331,3 +333,20 @@ def get_aura_image(img, color_str, thickness=3):
     )
 
     return PIL.Image.alpha_composite(blue_aura_img, img)
+
+
+def load_high_scores() -> List[Tuple[str, int]]:
+    """Doc."""
+
+    try:
+        with open(game.HIGH_SCORES_FILENAME, "rb") as f:
+            return pickle.load(f)
+    except FileNotFoundError:
+        return [("???", 0)] * 3
+
+
+def save_high_scores(high_scores_list) -> None:
+    """Doc."""
+
+    with open(game.HIGH_SCORES_FILENAME, "wb") as f:
+        pickle.dump(high_scores_list, f, protocol=-1)
