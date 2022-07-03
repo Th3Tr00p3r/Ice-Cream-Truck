@@ -41,6 +41,7 @@ ASSETS_PATH = Path("./assets")
 # TODO: add available cat thumbnails to HUD (use big cat images on sprite speadsheet
 # TODO: add sounds for: getting killed, competitor grabs popsicle, begging etc.
 # TODO: build the cats' house and the ice cream truck using free Kenney parts and PIL
+# TODO: add license and credits where needed (as well as my own name!)
 
 
 class GameWindow(arcade.Window):
