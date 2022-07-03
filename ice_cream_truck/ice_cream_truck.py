@@ -753,6 +753,7 @@ class TitleView(arcade.View):
         # setup the game before starting (but after title screen is drawn)
         if not self.is_game_ready and self.is_screen_drawn:
             self.game_view.setup()
+            self.high_scores_list = load_high_scores()
             self.is_game_ready = True
 
         # First, count down the time
@@ -823,11 +824,8 @@ class InstructionsView(arcade.View):
 
         self.title_view = title_view
 
-        # Find the instructions image in the image folder
-        instructions_image_path = ASSETS_PATH / "images" / "instructions_image.png"
-
-        # Load our title image
-        self.instructions_image = arcade.load_texture(instructions_image_path)
+        # Load background image
+        self.background_image = arcade.load_texture(ASSETS_PATH / "images" / "background_image.png")
 
         self.text_list = [
             arcade.Text(
@@ -854,13 +852,11 @@ class InstructionsView(arcade.View):
         ]
 
     def on_draw(self) -> None:
-        # Start the rendering loop
-        arcade.start_render()
 
         # Draw a rectangle filled with the instructions image
         arcade.draw_texture_rectangle(
             **game.SCREEN_PROPS.as_dict(),
-            texture=self.instructions_image,
+            texture=self.background_image,
         )
 
         # cover the image in semitransparent white
@@ -890,7 +886,99 @@ class HighScoresView(arcade.View):
         self.title_view = title_view
         self.high_scores_list = load_high_scores()
 
+        # Load our title image
+        self.background_image = arcade.load_texture(ASSETS_PATH / "images" / "background_image.png")
+
+        # Store a semi-transparent color to use as an overlay
+        self.fill_color = arcade.make_transparent_color(arcade.color.WHITE, transparency=150)
+
+        # define texts
+        name_score_str_list = [
+            f"{name} - {score}"
+            for idx, (name, score) in enumerate(self.title_view.high_scores_list)
+        ]
+        text_kwargs = dict(
+            start_x=0,
+            font_name="Kenney Pixel Square",
+            multiline=True,
+            width=game.SCREEN_PROPS.width,
+            align="center",
+        )
+        self.text_list = [
+            arcade.Text(
+                "Ice-Cream Truck",
+                start_y=game.SCREEN_PROPS.height - 150,
+                color=arcade.color.MAGENTA,
+                font_size=game.DEFAULT_FONT_SIZE + 15,
+                **text_kwargs,
+            ),
+            arcade.Text(
+                " Ice-Cream Truck",
+                start_y=game.SCREEN_PROPS.height - 156,
+                color=arcade.color.WHITE,
+                font_size=game.DEFAULT_FONT_SIZE + 15,
+                **text_kwargs,
+            ),
+            arcade.Text(
+                "High Scores:\n" + "\n".join(name_score_str_list),
+                start_y=game.SCREEN_PROPS.height - 300,
+                color=arcade.color.BLACK,
+                font_size=game.DEFAULT_FONT_SIZE,
+                **text_kwargs,
+            ),
+            arcade.Text(
+                " High Scores:\n" + "\n".join([f" {str_}" for str_ in name_score_str_list]),
+                start_y=game.SCREEN_PROPS.height - 306,
+                color=arcade.color.MAGENTA,
+                font_size=game.DEFAULT_FONT_SIZE,
+                **text_kwargs,
+            ),
+            arcade.Text(
+                "Press any key",
+                start_y=game.SCREEN_PROPS.height - 700,
+                color=arcade.color.MAGENTA,
+                font_size=game.DEFAULT_FONT_SIZE - 15,
+                **text_kwargs,
+            ),
+            arcade.Text(
+                " Press any key",
+                start_y=game.SCREEN_PROPS.height - 706,
+                color=arcade.color.WHITE,
+                font_size=game.DEFAULT_FONT_SIZE - 15,
+                **text_kwargs,
+            ),
+        ]
+
+    def on_draw(self) -> None:
+        """Draw the underlying screen, blurred, then the game over text"""
+
+        # Draw a rectangle filled with the instructions image
+        arcade.draw_texture_rectangle(
+            **game.SCREEN_PROPS.as_dict(),
+            texture=self.background_image,
+        )
+
+        # Now create a filled rect that covers the current viewport
+        # We get the viewport size from the game view
+        arcade.draw_lrtb_rectangle_filled(
+            left=0,
+            right=game.SCREEN_PROPS.width,
+            top=game.SCREEN_PROPS.height,
+            bottom=0,
+            color=self.fill_color,
+        )
+
+        # Now show the game over text
+        for text in self.text_list:
+            text.draw()
+
     def on_key_press(self, key: int, modifiers: int) -> None:
+        """Restart the current level when the user presses Enter
+
+        Arguments:
+            key -- Which key was pressed
+            modifiers -- What modifiers were active
+        """
 
         if key in game.ANY_KEY:
             self.window.show_view(self.title_view)
