@@ -4,6 +4,7 @@ Ice Cream Truck Game
 
 import os
 import sys
+import time
 from contextlib import suppress
 from itertools import cycle
 from pathlib import Path
@@ -546,7 +547,7 @@ class PlatformerView(arcade.View):
         # Draw the score in the upper left
         if self.score != self.last_drawn_score:
             new_score_image = self.get_score_image(self.score)
-            unique_str = str(new_score_image) + str(self.game_timer)
+            unique_str = str(new_score_image) + str(self.game_timer) + str(time.perf_counter())
             self.new_score_texture = arcade.Texture(unique_str, new_score_image)
             self.last_drawn_score = self.score
 
@@ -561,7 +562,7 @@ class PlatformerView(arcade.View):
         # Draw lives HUD in the upper right
         if self.player.lives != self.last_drawn_lives:
             new_lives_image = self.get_lives_hud(self.MAX_PLAYER_LIVES, self.player.lives)
-            unique_str = str(new_lives_image) + str(self.game_timer)
+            unique_str = str(new_lives_image) + str(self.game_timer) + str(time.perf_counter())
             self.lives_texture = arcade.Texture(unique_str, new_lives_image)
             self.last_drawn_lives = self.player.lives
 
@@ -577,7 +578,9 @@ class PlatformerView(arcade.View):
         # Draw the score multiplier below the lives HUD
         if self.score_multiplier != self.last_drawn_score_multiplier:
             new_score_multiplier_image = self.get_score_multiplier_image(self.score_multiplier)
-            unique_str = str(new_score_multiplier_image) + str(self.game_timer)
+            unique_str = (
+                str(new_score_multiplier_image) + str(self.game_timer) + str(time.perf_counter())
+            )
             self.new_score_multiplier_texture = arcade.Texture(
                 unique_str, new_score_multiplier_image
             )
