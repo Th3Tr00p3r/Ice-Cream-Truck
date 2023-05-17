@@ -7,6 +7,7 @@ import sys
 import time
 from contextlib import suppress
 from itertools import cycle
+from pathlib import Path
 from random import choice, random, uniform
 from types import SimpleNamespace
 from typing import Dict, Union
@@ -29,7 +30,6 @@ from sprites import (
     RedCat,
     YellowCat,
 )
-from pathlib import Path
 
 # Assets path
 ASSETS_PATH = Path("./assets").resolve()
