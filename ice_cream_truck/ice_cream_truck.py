@@ -7,7 +7,6 @@ import sys
 import time
 from contextlib import suppress
 from itertools import cycle
-from pathlib import Path
 from random import choice, random, uniform
 from types import SimpleNamespace
 from typing import Dict, Union
@@ -30,10 +29,10 @@ from sprites import (
     RedCat,
     YellowCat,
 )
+from pathlib import Path
 
 # Assets path
-ASSETS_PATH = Path("./assets")
-
+ASSETS_PATH = Path("./assets").resolve()
 
 # TODO:
 # Red: superpower is time-stop: many pops are thrown then everything slows down but the player, for a time

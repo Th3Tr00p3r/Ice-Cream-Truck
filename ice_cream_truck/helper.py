@@ -12,7 +12,6 @@ import numpy as np
 import PIL
 import PIL.ImageMorph
 
-
 class Limits:
     """Doc."""
 

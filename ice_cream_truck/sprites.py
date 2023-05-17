@@ -1,10 +1,9 @@
 import math
 from collections import namedtuple
 from contextlib import suppress
-from pathlib import Path
 from random import choice, choices, randint, random, uniform
 from types import SimpleNamespace
-
+from pathlib import Path
 import arcade
 import game_constants as game
 import numpy as np
@@ -12,8 +11,7 @@ import PIL
 from helper import Limits, Vector, get_aura_image, tint_greyscale_pixels
 
 # Assets path
-ASSETS_PATH = Path("./assets")
-
+ASSETS_PATH = Path("./assets").resolve()
 
 class SpriteMixin:
     """Useful methods for sprites"""
