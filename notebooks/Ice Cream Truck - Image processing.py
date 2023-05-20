@@ -1,16 +1,20 @@
 # ---
 # jupyter:
 #   jupytext:
+#     formats: py:percent,ipynb
 #     text_representation:
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.13.8
+#       jupytext_version: 1.14.0
 #   kernelspec:
-#     display_name: Python 3
+#     display_name: Python 3 (ipykernel)
 #     language: python
 #     name: python3
 # ---
+
+# %% [markdown]
+# # Sprite generation for the Ice-Cream Truck game
 
 # %% [markdown]
 # General imports and definitions:
@@ -68,7 +72,9 @@ from random import choice, uniform, gauss
 # We'll be using popsicles and big cats (over some simple background). We'll need blue, red and yellow cats, and popsicles of "all colors":
 
 # %%
-MAIN_IMAGES_PATH = Path("D:/MEGA/Programming/games/ice_cream_truck/assets/images")
+MAIN_IMAGES_PATH = Path("D:/MEGA/Programming/games/ice_cream_truck/ice_cream_truck/assets/images")
+# should_save = True
+should_save = False
 
 
 big_black_cat_img = Image.open(MAIN_IMAGES_PATH / "cat" / "big_tile_image1.png")
@@ -200,9 +206,6 @@ display(title_image)
 # save it:
 
 # %%
-# should_save = True
-should_save = False
-
 if should_save:
     title_image.save(MAIN_IMAGES_PATH / "title_image.png")
     print(f"saved as {MAIN_IMAGES_PATH / 'title_image.png'}")
@@ -224,7 +227,7 @@ from PIL import Image
 # Loading the spreadsheet
 
 # %%
-DIR_PATH = Path("D:/MEGA/Programming/games/ice_cream_truck/assets/images/cat/source")
+DIR_PATH = MAIN_IMAGES_PATH / "cat/source"
 IMG_PATH = DIR_PATH / "SNES - Socks the Cat Rocks the Hill Prototype - Socks The Cat.png"
 
 spritesheet_img = Image.open(IMG_PATH)
@@ -483,13 +486,13 @@ for name, sprite_img in zip(name_list, my_sprites):
 # And finally, we save the sprites:
 
 # %%
-SAVEֹֹֹ_DIR_PATH = Path("D:/MEGA/Programming/games/ice_cream_truck/assets/images/cat")
-
-for name, img_list in sprite_name_dict.items():
-    for idx, img in enumerate(img_list):
-        img.save(
-            SAVEֹֹֹ_DIR_PATH / f"{name}{idx+1}.png",
-        )
+if should_save:
+    SAVEֹֹֹ_DIR_PATH = MAIN_IMAGES_PATH / "cat"
+    for name, img_list in sprite_name_dict.items():
+        for idx, img in enumerate(img_list):
+            img.save(
+                SAVEֹֹֹ_DIR_PATH / f"{name}{idx+1}.png",
+            )
 
 # %% [markdown]
 # # Adding Color Aura to Texture
@@ -506,7 +509,7 @@ from PIL import ImageChops, ImageEnhance
 # get image of blue cat:
 
 # %%
-IMAGE_PATH = Path("D:/MEGA/Programming/games/ice_cream_truck/assets/images/cat/running1.png")
+IMAGE_PATH = MAIN_IMAGES_PATH / "cat/running1.png"
 color = "blue"
 
 img = tint_greyscale_pixels(Image.open(IMAGE_PATH), color)
@@ -561,7 +564,7 @@ display(aura_img)
 # %%
 from PIL import Image, ImageColor, ImageDraw, ImageFilter, ImageMorph, ImageOps
 
-MAIN_PATH = Path("D:/MEGA/Programming/games/ice_cream_truck/assets/images")
+MAIN_PATH = MAIN_IMAGES_PATH
 
 # %% [markdown]
 # load a heart image and a popsicle image, painting the popsicle red for clarity:
@@ -665,9 +668,10 @@ display(ImageOps.scale(long_stick_img, 4, Image.BOX))
 # %%
 heart_popsicle = concat_list_v([heart_img, long_stick_img], [27, 0], [0, 1])
 
-heart_popsicle.save(
-    MAIN_PATH / "items" / "popsicleHeart.png",
-)
+if should_save:
+    heart_popsicle.save(
+        MAIN_PATH / "items" / "popsicleHeart.png",
+    )
 
 # test
 display(heart_popsicle)
@@ -685,7 +689,7 @@ display(heart_popsicle)
 # %%
 from PIL import Image, ImageColor, ImageDraw, ImageFilter, ImageMorph, ImageOps
 
-MAIN_PATH = Path("D:/MEGA/Programming/games/ice_cream_truck/assets/images/items")
+MAIN_PATH = MAIN_IMAGES_PATH / "items"
 WHITE_POP_PATH = MAIN_PATH / "popsicleWhite.png"
 
 # %% [markdown]
@@ -772,7 +776,7 @@ for img in red_pop_melting_images:
 # %%
 from PIL import Image, ImageColor, ImageDraw, ImageFilter, ImageMorph, ImageOps
 
-MAIN_PATH = Path("D:/MEGA/Programming/games/ice_cream_truck/assets/images/items")
+MAIN_PATH = MAIN_IMAGES_PATH / "items"
 WHITE_POP_PATH = MAIN_PATH / "popsicleWhite.png"
 
 # %% [markdown]
@@ -812,7 +816,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 
-MAIN_PATH = Path("D:/MEGA/Programming/games/ice_cream_truck/assets/images/gifs/")
+MAIN_PATH = MAIN_IMAGES_PATH / "gifs"
 GIF_PATH = MAIN_PATH / "poof.gif"
 
 
@@ -914,26 +918,28 @@ for frame, test_frame in zip(frames, test_frames):
 # Re-saving as a GIF, which could be used in arcade:
 
 # %%
-durations = [frame.duration for frame in filled_filtered_frames]
-images = [frame.image for frame in filled_filtered_frames]
-filled_filtered_frames[0].image.save(
-    MAIN_PATH / "better_poof.gif",
-    save_all=True,
-    append_images=images[1:],
-    optimize=False,
-    duration=durations,
-    transparency=0,
-    disposal=2,
-)
+if should_save:
+    durations = [frame.duration for frame in filled_filtered_frames]
+    images = [frame.image for frame in filled_filtered_frames]
+    filled_filtered_frames[0].image.save(
+        MAIN_PATH / "better_poof.gif",
+        save_all=True,
+        append_images=images[1:],
+        optimize=False,
+        duration=durations,
+        transparency=0,
+        disposal=2,
+    )
 
 # %% [markdown]
 # Also save as a series of images in case that doesn't work:
 
 # %%
-for idx, frame in enumerate(filled_filtered_frames):
-    frame.image.save(
-        MAIN_PATH / f"poof{idx+1}.png",
-    )
+if should_save:
+    for idx, frame in enumerate(filled_filtered_frames):
+        frame.image.save(
+            MAIN_PATH / f"poof{idx+1}.png",
+        )
 
 # %% [markdown]
 # # Create a "lives" HUD image
@@ -951,7 +957,7 @@ for idx, frame in enumerate(filled_filtered_frames):
 # %%
 from PIL import Image, ImageChops, ImageColor
 
-IMAGE_DIR_PATH = Path("D:/MEGA/Programming/games/ice_cream_truck/assets/images/HUD")
+IMAGE_DIR_PATH = MAIN_IMAGES_PATH / "HUD"
 
 # %%
 empty_heart_image = Image.open(IMAGE_DIR_PATH / "hudHeart_empty.png")
@@ -988,7 +994,7 @@ from PIL import Image, ImageChops, ImageColor
 # Create a dictionary where the keys are integers between 0-9 and values are corresponding images:
 
 # %%
-IMAGE_DIR_PATH = Path("D:/MEGA/Programming/games/ice_cream_truck/assets/images/HUD/score")
+IMAGE_DIR_PATH = MAIN_IMAGES_PATH / "HUD/score"
 
 digit_dict = {
     idx: Image.open(img_path) for idx, img_path in enumerate(IMAGE_DIR_PATH.glob("*.png"))
@@ -1002,7 +1008,7 @@ display(digit_dict[5])
 # Defining a function which will display a list of images (digits) side-by-side - a number
 
 # %%
-def resize_concat_horizontally(im_list, resample=Image.BOX):
+def resize_concat_horizontally(im_list, resample=Image.Resampling.BOX):
     # Adapted from: https://note.nkmk.me/en/python-pillow-concat-images/
 
     cropped_img_list = [img.crop(img.getbbox()) for img in im_list]
@@ -1075,7 +1081,7 @@ from pathlib import Path
 # Convert to Numpy and apply color change:
 
 # %%
-IMAGE_DIR_PATH = Path("D:/MEGA/Programming/games/ice_cream_truck/assets/images/cat")
+IMAGE_DIR_PATH = MAIN_IMAGES_PATH / "cat"
 color = "gold"
 
 for img_path in IMAGE_DIR_PATH.glob("*.png"):

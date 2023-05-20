@@ -1,9 +1,10 @@
 import math
 from collections import namedtuple
 from contextlib import suppress
+from pathlib import Path
 from random import choice, choices, randint, random, uniform
 from types import SimpleNamespace
-from pathlib import Path
+
 import arcade
 import game_constants as game
 import numpy as np
@@ -13,45 +14,51 @@ from helper import Limits, Vector, get_aura_image, tint_greyscale_pixels
 # Assets path
 ASSETS_PATH = Path("./assets").resolve()
 
+TexturePair = namedtuple("TexturePair", "RIGHT LEFT")
+
+
 class SpriteMixin:
     """Useful methods for sprites"""
 
     color_str: str  # mypy complained...?
 
-    def load_texture(self, filename, color_tint: str = None, **kwargs):
+    def load_texture(
+        self, filepath, flipped_horizontally=False, color: str = None, aura_color=None, **kwargs
+    ):
         """
         Load a texture pair, with the second being a mirror image.
         Optionally, tint the greyscale pixels of the texture.
         """
 
-        texture = arcade.load_texture(filename)
+        texture_name = f"{filepath.parent.stem}_{filepath.stem}"
 
-        if color_tint is not None:
-            tinted_texture = tint_greyscale_pixels(texture.image, color_tint, **kwargs)
-            unique_str = str(tinted_texture) + str(uniform(-1e6, 1e6))
-            texture = arcade.Texture(unique_str, tinted_texture)
+        # open image at filepath
+        img = PIL.Image.open(filepath)
+        # flip if needed
+        if flipped_horizontally:
+            img = img.transpose(method=PIL.Image.Transpose.FLIP_LEFT_RIGHT)
+            texture_name += "_flipped"
 
-        return texture
+        # tint and add background aura as needed
+        if color is not None:
+            img = tint_greyscale_pixels(img, color, **kwargs)
+            texture_name += f"_{color}"
+        if aura_color is not None:
+            img = get_aura_image(img, aura_color)
+            texture_name += f"_{aura_color}"
 
-    def load_texture_pair(self, filename, color_tint: str = None, **kwargs):
+        # return a texture
+        return arcade.Texture(texture_name, img)
+
+    def load_texture_pair(self, filepath, **kwargs):
         """
         Load a texture pair, with the second being a mirror image.
         Optionally, tint the greyscale pixels of the texture.
         """
 
-        right_texture = arcade.load_texture(filename)
-        left_texture = arcade.load_texture(filename, flipped_horizontally=True)
-
-        if color_tint is not None:
-            tinted_right = tint_greyscale_pixels(right_texture.image, color_tint, **kwargs)
-            tinted_left = tint_greyscale_pixels(left_texture.image, color_tint, **kwargs)
-            right_texture = arcade.Texture(str(tinted_right), tinted_right)
-            left_texture = arcade.Texture(str(tinted_left), tinted_left)
-
-        TexturePair = namedtuple("TexturePair", "RIGHT LEFT")
         return TexturePair(
-            RIGHT=right_texture,
-            LEFT=left_texture,
+            RIGHT=self.load_texture(filepath, **kwargs),
+            LEFT=self.load_texture(filepath, flipped_horizontally=True, **kwargs),
         )
 
     def restrict_position(self, map_width, should_kill=False, bottom=0):
@@ -98,50 +105,98 @@ class AnimatedTexture:
         return self.image_iter[self.img_idx]
 
 
+class PopsicleColorTextures(SpriteMixin):
+    """Doc."""
+
+    MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "items"
+
+    def __init__(self, color_str):
+        self.color_str = color_str
+        self.textures = self._get_textures()
+
+    def _get_textures(self):
+        """Return a namespace with colored popsicle textures"""
+
+        # standing texture
+        standing_texture = self.load_texture(
+            self.MAIN_TEXTURE_PATH / "popsicleWhite.png",
+            color=self.color_str,
+            linear_beta=(0, 1),
+            threshold_deviation_from_grey=10,
+            should_tint_black=False,
+        )
+
+        # create melting textures
+        melt_textures = []
+        h = standing_texture.height
+        w = standing_texture.width
+        for idx, (x_factor, y_factor) in enumerate(
+            zip(np.linspace(0.5, 0.875, 10), np.linspace(0, 0.2, 10))
+        ):
+            arr_img = np.array(standing_texture.image)
+            arr_img[: int(h * y_factor), :, 3] = 0
+            arr_img[:, : int(w / 2 * x_factor), 3] = 0
+            arr_img[:, int(w * (1 - x_factor / 2)) :, 3] = 0
+            image = PIL.Image.fromarray(arr_img)
+            texture_name = f"{self.color_str}_popsicle_melting_{idx}"
+            melt_textures.append(arcade.Texture(texture_name, image))
+
+        return SimpleNamespace(
+            standing=standing_texture,
+            melting=melt_textures,
+        )
+
+
 class ColorCatTextures(SpriteMixin):
     """Doc."""
 
     MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "cat"
 
-    def __init__(self, color_str):
+    def __init__(self, color_str, **kwargs):
         self.color_str = color_str
-        self.textures = self.get_textures()
+        self.textures = self._get_textures(color=color_str, **kwargs)
 
-    def get_textures(self):
+    def _get_textures(self, aura_color=None, **kwargs):
         """Return a namespace with colored cat textures"""
+        # TODO: for each texture create an "aura" version (only for player cat thogh - use flag at instantiation?)
 
-        return SimpleNamespace(
-            standing=self.load_texture_pair(
-                self.MAIN_TEXTURE_PATH / "standing1.png", self.color_str
-            ),
-            running=[
-                self.load_texture_pair(self.MAIN_TEXTURE_PATH / f"running{i}.png", self.color_str)
-                for i in (1, 2, 3, 4, 5, 6)
-            ],
-            pouncing=self.load_texture_pair(
-                self.MAIN_TEXTURE_PATH / "running6.png", self.color_str
-            ),
-            sliding=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "running1.png", self.color_str),
-            jumping=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "jumping1.png", self.color_str),
-            stalling=[
-                self.load_texture_pair(self.MAIN_TEXTURE_PATH / f"stalling{i}.png", self.color_str)
-                for i in (1, 2)
-            ],
-            falling=self.load_texture_pair(self.MAIN_TEXTURE_PATH / "falling1.png", self.color_str),
-            scratching=self.load_texture_pair(
-                self.MAIN_TEXTURE_PATH / "scratching1.png", self.color_str
-            ),
-            dropping=self.load_texture_pair(
-                self.MAIN_TEXTURE_PATH / "dropping1.png", self.color_str
-            ),
-            begging=[
-                self.load_texture_pair(self.MAIN_TEXTURE_PATH / f"begging{i}.png", self.color_str)
-                for i in (1, 2, 3, 4, 3, 2)
-            ],
-            getting_hit=self.load_texture_pair(
-                self.MAIN_TEXTURE_PATH / "getting_hit1.png", self.color_str
-            ),
-        )
+        paths_dict = {
+            "standing": self.MAIN_TEXTURE_PATH / "standing1.png",
+            "running": [self.MAIN_TEXTURE_PATH / f"running{i}.png" for i in range(1, 6)],
+            "pouncing": self.MAIN_TEXTURE_PATH / "running6.png",
+            "sliding": self.MAIN_TEXTURE_PATH / "running1.png",
+            "jumping": self.MAIN_TEXTURE_PATH / "jumping1.png",
+            "stalling": [self.MAIN_TEXTURE_PATH / f"stalling{i}.png" for i in (1, 2)],
+            "falling": self.MAIN_TEXTURE_PATH / "falling1.png",
+            "scratching": self.MAIN_TEXTURE_PATH / "scratching1.png",
+            "dropping": self.MAIN_TEXTURE_PATH / "dropping1.png",
+            "begging": [self.MAIN_TEXTURE_PATH / f"begging{i}.png" for i in (1, 2, 3, 4, 3, 2)],
+            "getting_hit": self.MAIN_TEXTURE_PATH / "getting_hit1.png",
+        }
+
+        texture_dict = {}
+        for name, paths in paths_dict.items():
+            try:
+                texture_dict[name] = self.load_texture_pair(paths, **kwargs)
+            except AttributeError:
+                # paths is a list of paths
+                texture_dict[name] = [self.load_texture_pair(path_, **kwargs) for path_ in paths]
+
+        # add aura-d textures, too
+        if aura_color:
+            for name, paths in paths_dict.items():
+                try:
+                    texture_dict[f"{name}_aura"] = self.load_texture_pair(
+                        paths, aura_color=aura_color, **kwargs
+                    )
+                except AttributeError:
+                    # paths is a list of paths
+                    texture_dict[f"{name}_aura"] = [
+                        self.load_texture_pair(path_, aura_color=aura_color, **kwargs)
+                        for path_ in paths
+                    ]
+
+        return SimpleNamespace(**texture_dict)
 
 
 class BasicSprite(arcade.Sprite, SpriteMixin):
@@ -173,7 +228,7 @@ class Poof(BasicSprite):
         super().__init__(init_position, hit_box_algorithm=None, scale=self.BASE_SCALE, **kwargs)
 
         self.loaded_textures = [
-            self.load_texture(self.MAIN_TEXTURE_PATH / f"poof{i}.png", color_str)
+            self.load_texture(self.MAIN_TEXTURE_PATH / f"poof{i}.png", color=color_str)
             for i in range(1, 16)
         ]
         #        self.animated_textures = iter(self.loaded_textures)
@@ -304,18 +359,19 @@ class CompetitorCat(BasicSprite):
 
         self.sought_popsicle: Popsicle = None
 
-    def change_texture_and_hitbox(self, texture_name: str, idx=None, change_hitbox=False):
+    def change_texture_and_hitbox(self, texture_type: str, idx=None, change_hitbox=False):
         """Doc."""
 
         if idx is not None:
-            self.texture = getattr(self.loaded_textures, texture_name)[idx][
+            self.texture = getattr(self.loaded_textures, texture_type)[idx][
                 self.state.is_facing_left
             ]
         else:
-            self.texture = getattr(self.loaded_textures, texture_name)[self.state.is_facing_left]
+            self.texture = getattr(self.loaded_textures, texture_type)[self.state.is_facing_left]
+        self.texture_type = texture_type
 
         if change_hitbox:
-            self.hit_box = getattr(self.hitboxes, texture_name)
+            self.hit_box = getattr(self.hitboxes, texture_type)
         else:  # use default hitbox
             self.hit_box = self.init_hitbox
 
@@ -370,7 +426,7 @@ class CompetitorCat(BasicSprite):
             ) / len(self.loaded_textures.running):
                 self.texture_idx += 1
                 self.timer = 0
-            if self.texture_idx == len(self.loaded_textures.running):
+            if self.texture_idx >= len(self.loaded_textures.running):
                 self.texture_idx = 0
             self.change_texture_and_hitbox("running", idx=self.texture_idx, change_hitbox=True)
 
@@ -463,9 +519,6 @@ class PlayerCat(BasicSprite):
     alpha: int
     change_x: float
 
-    color_textures_dict = {
-        color_str: ColorCatTextures(color_str) for color_str in game.PLAYER_COLORS
-    }
     poof_dict = {color_str: Poof(Vector(0, 0), color_str) for color_str in game.PLAYER_COLORS}
     jump_sound = arcade.load_sound(str(ASSETS_PATH / "sounds" / "jump.wav"))
     get_hit_sound = arcade.load_sound(str(ASSETS_PATH / "sounds" / "get_hit.wav"))
@@ -485,6 +538,11 @@ class PlayerCat(BasicSprite):
         can_swipe=False,
         **kwargs,
     ):
+
+        self.color_textures_dict = {
+            color_str: ColorCatTextures(color_str, aura_color=aura_color_str)
+            for color_str in game.PLAYER_COLORS
+        }
 
         super().__init__(
             init_position,
@@ -557,7 +615,6 @@ class PlayerCat(BasicSprite):
 
         # Load textures
         self.color_str = color_str
-        self.aura_color_str = aura_color_str
         self.loaded_textures = self.color_textures_dict[color_str].textures
         self.hitboxes = SimpleNamespace(
             **{
@@ -697,18 +754,30 @@ class PlayerCat(BasicSprite):
         else:
             self.move_state = 0
 
-    def change_texture_and_hitbox(self, texture_name: str, idx=None, change_hitbox=False):
+    def change_texture_and_hitbox(self, texture_type: str, idx=None, change_hitbox=False):
         """Doc."""
 
-        if idx is not None:
-            self.texture = getattr(self.loaded_textures, texture_name)[idx][
+        try:
+            self.texture = getattr(self.loaded_textures, texture_type)[idx][
                 self.state.is_facing_left
             ]
-        else:
-            self.texture = getattr(self.loaded_textures, texture_name)[self.state.is_facing_left]
+        except TypeError:
+            # idx is None
+            self.texture = getattr(self.loaded_textures, texture_type)[self.state.is_facing_left]
+        except IndexError:
+            # index does not match (related to how auras are handled...
+            try:
+                self.texture = getattr(self.loaded_textures, texture_type)[0][
+                    self.state.is_facing_left
+                ]
+            except TypeError:
+                self.texture = getattr(self.loaded_textures, texture_type)[
+                    self.state.is_facing_left
+                ]
+        self.texture_type = texture_type
 
         if change_hitbox:
-            self.hit_box = getattr(self.hitboxes, texture_name)
+            self.hit_box = getattr(self.hitboxes, texture_type)
         else:  # use default hitbox
             self.hit_box = self.init_hitbox
 
@@ -800,7 +869,8 @@ class PlayerCat(BasicSprite):
 
         # add aura when superpower is ready
         if self.state.superpower.is_ready:
-            self.add_aura_to_texture()
+            if "aura" not in self.texture_type:
+                self.change_texture_and_hitbox(self.texture_type + "_aura", idx=self.texture_idx)
 
     def update_velocity(self, delta_time: float):
         """Doc."""
@@ -932,13 +1002,6 @@ class PlayerCat(BasicSprite):
 
         self.is_alive = False
         self.kill()
-
-    def add_aura_to_texture(self):
-        """Add an aura effect to the current texture"""
-
-        aura_img = get_aura_image(self.texture.image, self.aura_color_str)
-        with suppress(IndexError):  # arcade issue
-            self.texture = arcade.Texture(str(aura_img), aura_img)
 
     def update_superpower_timer(self, delta_time):
         """Doc."""
@@ -1080,12 +1143,14 @@ class Popsicle(BasicSprite):
         self.change_angle = -math.copysign(1, x_speed) * throw_speed_ppf
 
         self.color_str: str = None
+        self.is_on_ground = False
 
     def move(self, delta_time):
         """Doc."""
 
         # update velocity
-        self.change_y -= game.GRAVITY * 250 * delta_time
+        if not self.is_on_ground:
+            self.change_y -= game.GRAVITY * 250 * delta_time
 
         # change position
         self.center_x += self.change_x * delta_time
@@ -1101,6 +1166,7 @@ class Popsicle(BasicSprite):
             self.change_angle *= uniform(-1.5, 1.5)
             self.change_y *= -uniform(0.3, 0.5)
         else:
+            self.is_on_ground = True
             self.stop()
 
     def stop(self, should_stop_y=True):
@@ -1124,6 +1190,8 @@ class RegularPopsicle(Popsicle):
     FROZEN_TIME = 1  # seconds?
     MELT_RATE = 5  # units?
 
+    color_textures_dict = {color_str: PopsicleColorTextures(color_str) for color_str in game.COLORS}
+
     def __init__(
         self,
         color_str: str,
@@ -1132,25 +1200,18 @@ class RegularPopsicle(Popsicle):
 
         super().__init__(*args, scale=game.POPSICLE_SCALING)
 
-        self.texture = self.load_texture(
-            self.white_pop_path,
-            color_str,
-            linear_beta=(0, 1),
-            threshold_deviation_from_grey=10,
-            should_tint_black=False,
+        # Load textures
+        self.color_str = color_str
+        self.loaded_textures = self.color_textures_dict[color_str].textures
+        self.hitboxes = SimpleNamespace(
+            **{
+                name: (txtr[0].hit_box_points if isinstance(txtr, list) else txtr.hit_box_points)
+                for name, txtr in vars(self.loaded_textures).items()
+            }
         )
 
-        melt_textures = []
-        h = self.texture.height
-        w = self.texture.width
-        for x_factor, y_factor in zip(np.linspace(0.5, 0.875, 10), np.linspace(0, 0.2, 10)):
-            arr_img = np.array(self.texture.image)
-            arr_img[: int(h * y_factor), :, 3] = 0
-            arr_img[:, : int(w / 2 * x_factor), 3] = 0
-            arr_img[:, int(w * (1 - x_factor / 2)) :, 3] = 0
-            image = PIL.Image.fromarray(arr_img)
-            melt_textures.append(arcade.Texture(str(image), image))
-        self.melt_textures_iter = iter(melt_textures)
+        self.texture = self.loaded_textures.standing
+        self.melt_textures_iter = iter(self.loaded_textures.melting)
 
         self.color_str = color_str
         self.point_value = self.BASE_POINTS

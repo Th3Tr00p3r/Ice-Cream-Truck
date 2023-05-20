@@ -12,6 +12,7 @@ import numpy as np
 import PIL
 import PIL.ImageMorph
 
+
 class Limits:
     """Doc."""
 
@@ -267,6 +268,7 @@ def tint_greyscale_pixels(
     threshold_shade_of_grey: float = 100.0,
     threshold_deviation_from_grey: float = 35.0,
     linear_beta: tuple = (0.8, 1.05),
+    **kwargs,
 ) -> PIL.Image:
 
     rgb_color = PIL.ImageColor.getrgb(color)

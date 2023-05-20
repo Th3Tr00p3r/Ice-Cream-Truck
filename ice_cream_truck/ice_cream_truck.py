@@ -34,9 +34,19 @@ from sprites import (
 # Assets path
 ASSETS_PATH = Path("./assets").resolve()
 
-# TODO:
-# Red: superpower is time-stop: many pops are thrown then everything slows down but the player, for a time
-# Yellow: Grows bigger with every popsicle. tramples smaller cats by pouncing. superpower is popsicle magnet for a time
+# TODO: no need for custom TextureAtlas (as far as I understand now)
+# NOTE: IT APPEARS THAT THE AURA TEXTURES ARE MOST DANGEROUS IN THIS RESPECT!
+# AS THEY CREATE A NEW TEXTURE FOR EVERY PLAYER MOVE!
+# what I need to do is as I did with the popsicles (and before that, ignorant of the texture atlas, with the cats)
+# I need to ensure each texture is loaded only once.
+# the problem now is with the HUD - I shouldn't create a new texture for each (infinite) combination of score digits, score multiplier,
+# or life (hearts).
+# for the life it should be simple enough to generate all options (only 6 I believe)
+# for the score multiplier and the score itself I would need to change the implementation a bit:
+# instead of ordering the numbers and creating a new image, I would use the existing images and just order them as I do now, but on screen.
+
+# TODO: Red: superpower is time-stop: many pops are thrown then everything slows down but the player, for a time
+# TODO: Yellow: Grows bigger with every popsicle. tramples smaller cats by pouncing. superpower is popsicle magnet for a time
 
 # TODO: add available cat thumbnails to HUD (use big cat images on sprite speadsheet
 # TODO: add sounds for: getting killed, competitor grabs popsicle, begging etc.
@@ -68,6 +78,10 @@ class GameWindow(arcade.Window):
             # constants. This does NOT respect aspect ratio. You'd need to
             # do a bit of math for that.
             self.set_viewport(0, game.SCREEN_PROPS.width, 0, game.SCREEN_PROPS.height)
+
+        # TESTESTEST - SHOW TEXTUREATLAS
+        if key == arcade.key.O:
+            self.ctx.default_atlas.show()
 
 
 class PlatformerView(arcade.View):
@@ -312,8 +326,8 @@ class PlatformerView(arcade.View):
         self.game_timer += delta_time
         if self.game_timer >= 60:
             self.game_timer = 0.0
-            self.new_cat_prob_frame *= 1.1
-            if self.n_allowed_cats < 5:
+            self.new_cat_prob_frame *= 1.25
+            if self.n_allowed_cats < 7:
                 self.n_allowed_cats += 1
 
         if self.score_multiplier_timer > 0.0:
@@ -345,7 +359,6 @@ class PlatformerView(arcade.View):
                     popsicle.restrict_position(self.map_width, should_kill=True)
 
         # Update player movement based on the physics engine
-        #        with suppress(OSError, GLException):  # NOTE: error caused by unpausing?
         self.physics_engine.update()
         self.player.update_state()
         self.player.update_velocity(delta_time)
