@@ -24,6 +24,7 @@ from helper import (
 from sprites import (
     BlueCat,
     CompetitorCat,
+    DigitTextures,
     IceCreamTruck,
     PlayerCat,
     Popsicle,
@@ -79,10 +80,6 @@ class GameWindow(arcade.Window):
             # do a bit of math for that.
             self.set_viewport(0, game.SCREEN_PROPS.width, 0, game.SCREEN_PROPS.height)
 
-        # TESTESTEST - SHOW TEXTUREATLAS
-        if key == arcade.key.O:
-            self.ctx.default_atlas.show()
-
 
 class PlatformerView(arcade.View):
     """Doc."""
@@ -112,11 +109,6 @@ class PlatformerView(arcade.View):
         self.score: int
         self.last_drawn_score: int = None
         self.last_drawn_score_multiplier: int = None
-        self.digit_dict: Dict[Union[int, str], PIL.Image] = {
-            idx: PIL.Image.open(img_path)
-            for idx, img_path in enumerate((ASSETS_PATH / "images" / "HUD" / "score").glob("*.png"))
-        }
-        self.digit_dict["x"] = PIL.Image.open(ASSETS_PATH / "images" / "HUD" / "hudX.png")
         self.score_multiplier: int
 
         # lives
@@ -227,6 +219,7 @@ class PlatformerView(arcade.View):
         self.player.jump()  # to fix freeze bug on game start
 
         # reset score
+        self.score_textures = DigitTextures()
         self.score = 0
         self.score_multiplier = 1
 
@@ -298,6 +291,11 @@ class PlatformerView(arcade.View):
         Arguments:
             delta_time -- How much time since the last call
         """
+
+        # TESTESTEST - TextureAtlas investigation
+        n_textures = len(self.window.ctx.default_atlas._textures)
+        print(f"Number of textures in TextureAtlas: {n_textures}")
+        # /TESTESTEST
 
         if self.slow_time_timer > 0:
             self.slow_time_timer -= delta_time
@@ -558,18 +556,9 @@ class PlatformerView(arcade.View):
 
         # Draw the score in the upper left
         if self.score != self.last_drawn_score:
-            new_score_image = self.get_score_image(self.score)
-            unique_str = str(new_score_image) + str(self.game_timer) + str(time.perf_counter())
-            self.new_score_texture = arcade.Texture(unique_str, new_score_image)
+            self.score_sprites = self.get_score_spritelist(self.score)
             self.last_drawn_score = self.score
-
-        arcade.draw_texture_rectangle(
-            self.view_left + 120,
-            self.view_bottom + game.SCREEN_PROPS.height - 75,
-            150,
-            75,
-            self.new_score_texture,
-        )
+        self.score_sprites.draw()
 
         # Draw lives HUD in the upper right
         if self.player.lives != self.last_drawn_lives:
@@ -606,14 +595,30 @@ class PlatformerView(arcade.View):
             self.new_score_multiplier_texture,
         )
 
-    def get_score_image(self, score: int):
+    def get_score_spritelist(self, score: int):
         """
-        Accepts an integer 'n' and a dictionary of digit images
-        and returns an image of the number, made of the digit images supplied.
+        Accepts an integer 'score' and returns a SpriteList composed of textures
+        of digits of the number supplied, with positions provided to propery display the
+        number 'score' upon .draw()
         """
 
-        img_list = [self.digit_dict[int(digit_char)] for digit_char in str(score)]
-        return crop_resize_concat_horizontally(img_list)
+        start_x = self.view_left + 50
+        start_y = self.view_bottom + game.SCREEN_PROPS.height - 100
+        current_x = start_x
+
+        score_spritelist = arcade.SpriteList()
+        for idx, digit_char in enumerate(str(score)):
+            digit_texture = self.score_textures.digits[int(digit_char)]
+            size_x, size_y = digit_texture.image.size
+            digit_sprite = arcade.Sprite(
+                texture=digit_texture,
+                center_x=current_x + size_x // 3,
+                center_y=start_y + size_y // 3,
+            )
+            score_spritelist.append(digit_sprite)
+            current_x += size_x // 3
+
+        return score_spritelist
 
     def get_score_multiplier_image(self, multiplier: int):
         """Doc."""

@@ -105,6 +105,25 @@ class AnimatedTexture:
         return self.image_iter[self.img_idx]
 
 
+class DigitTextures(SpriteMixin):
+    """Doc."""
+
+    MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "HUD"
+
+    def __init__(self):
+
+        self.digits = []
+        for digit in range(10):
+            self.digits.append(
+                self.load_texture(
+                    self.MAIN_TEXTURE_PATH / f"hud{digit}.png",
+                )
+            )
+        self.x = self.load_texture(
+            self.MAIN_TEXTURE_PATH / "hudX.png",
+        )
+
+
 class PopsicleColorTextures(SpriteMixin):
     """Doc."""
 
