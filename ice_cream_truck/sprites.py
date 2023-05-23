@@ -12,7 +12,12 @@ import PIL
 from helper import Limits, Vector, get_aura_image, tint_greyscale_pixels
 
 # Assets path
-ASSETS_PATH = Path("./assets").resolve()
+try:
+    # Nuitka onefile
+    __compiled__  # type: ignore
+    ASSETS_PATH = Path(__file__).parent / "assets"
+except NameError:
+    ASSETS_PATH = Path("./assets")
 
 TexturePair = namedtuple("TexturePair", "RIGHT LEFT")
 
@@ -188,7 +193,7 @@ class ColorCatTextures(SpriteMixin):
             "stalling": [self.MAIN_TEXTURE_PATH / f"stalling{i}.png" for i in (1, 2)],
             "falling": self.MAIN_TEXTURE_PATH / "falling1.png",
             "scratching": self.MAIN_TEXTURE_PATH / "scratching1.png",
-            "dropping": self.MAIN_TEXTURE_PATH / "dropping1.png",
+            "dropping": [self.MAIN_TEXTURE_PATH / f"dropping{i}.png" for i in (1, 2)],
             "begging": [self.MAIN_TEXTURE_PATH / f"begging{i}.png" for i in (1, 2, 3, 4, 3, 2)],
             "getting_hit": self.MAIN_TEXTURE_PATH / "getting_hit1.png",
         }
@@ -800,7 +805,7 @@ class PlayerCat(BasicSprite):
         else:  # use default hitbox
             self.hit_box = self.init_hitbox
 
-    def update_animation(self, delta_time: float):
+    def update_animation(self, delta_time: float):  # NOQA # C901
         """Doc."""
 
         self.timer += delta_time
@@ -822,7 +827,10 @@ class PlayerCat(BasicSprite):
         # drop animation (YellowCat)
         elif self.state.drop.is_dropping:
             self.angle = 0
-            self.change_texture_and_hitbox("dropping")
+            if self.change_y > -20:
+                self.change_texture_and_hitbox("dropping", idx=0)
+            else:
+                self.change_texture_and_hitbox("dropping", idx=1)
 
         # Jumping/Stalling/Falling animation
         elif (self.physics_engine.jumps_since_ground >= 1 or self.change_y < 0.0) and abs(

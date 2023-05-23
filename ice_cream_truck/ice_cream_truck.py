@@ -2,25 +2,16 @@
 Ice Cream Truck Game
 """
 
-import os
-import sys
-import time
 from contextlib import suppress
 from itertools import cycle
 from pathlib import Path
 from random import choice, random, uniform
 from types import SimpleNamespace
-from typing import Dict, Union
 
 import arcade
 import game_constants as game
 import PIL
-from helper import (
-    Vector,
-    crop_resize_concat_horizontally,
-    load_high_scores,
-    save_high_scores,
-)
+from helper import Vector, load_high_scores, save_high_scores
 from sprites import (
     BlueCat,
     CompetitorCat,
@@ -33,18 +24,12 @@ from sprites import (
 )
 
 # Assets path
-ASSETS_PATH = Path("./assets").resolve()
-
-# TODO: no need for custom TextureAtlas (as far as I understand now)
-# NOTE: IT APPEARS THAT THE AURA TEXTURES ARE MOST DANGEROUS IN THIS RESPECT!
-# AS THEY CREATE A NEW TEXTURE FOR EVERY PLAYER MOVE!
-# what I need to do is as I did with the popsicles (and before that, ignorant of the texture atlas, with the cats)
-# I need to ensure each texture is loaded only once.
-# the problem now is with the HUD - I shouldn't create a new texture for each (infinite) combination of score digits, score multiplier,
-# or life (hearts).
-# for the life it should be simple enough to generate all options (only 6 I believe)
-# for the score multiplier and the score itself I would need to change the implementation a bit:
-# instead of ordering the numbers and creating a new image, I would use the existing images and just order them as I do now, but on screen.
+try:
+    # Nuitka onefile
+    __compiled__  # type: ignore
+    ASSETS_PATH = Path(__file__).parent / "assets"
+except NameError:
+    ASSETS_PATH = Path("./assets")
 
 # TODO: Red: superpower is time-stop: many pops are thrown then everything slows down but the player, for a time
 # TODO: Yellow: Grows bigger with every popsicle. tramples smaller cats by pouncing. superpower is popsicle magnet for a time
@@ -108,14 +93,16 @@ class PlatformerView(arcade.View):
         # Someplace to keep score
         self.score: int
         self.last_drawn_score: int = None
-        self.last_drawn_score_multiplier: int = None
+        self.last_drawn_multiplier: int = None
         self.score_multiplier: int
 
         # lives
-        self.empty_heart_image = PIL.Image.open(
-            ASSETS_PATH / "images" / "HUD" / "hudHeart_empty.png"
+        self.empty_heart_texture = arcade.Texture(
+            "empty heart", PIL.Image.open(ASSETS_PATH / "images" / "HUD" / "hudHeart_empty.png")
         )
-        self.full_heart_image = PIL.Image.open(ASSETS_PATH / "images" / "HUD" / "hudHeart_full.png")
+        self.full_heart_texture = arcade.Texture(
+            "full heart", PIL.Image.open(ASSETS_PATH / "images" / "HUD" / "hudHeart_full.png")
+        )
         self.last_drawn_lives: int = None
 
         # Load up our sounds here
@@ -291,11 +278,6 @@ class PlatformerView(arcade.View):
         Arguments:
             delta_time -- How much time since the last call
         """
-
-        # TESTESTEST - TextureAtlas investigation
-        n_textures = len(self.window.ctx.default_atlas._textures)
-        print(f"Number of textures in TextureAtlas: {n_textures}")
-        # /TESTESTEST
 
         if self.slow_time_timer > 0:
             self.slow_time_timer -= delta_time
@@ -542,99 +524,119 @@ class PlatformerView(arcade.View):
     def on_draw(self) -> None:
         arcade.start_render()
 
-        # Draw all the sprites
+        #        # TESTESTEST - TextureAtlas investigation
+        #        n_textures = len(self.window.ctx.default_atlas._textures)
+        #        try:
+        #            if n_textures != self.last_n_textures:
+        #                self.n_texture_sprites = self.get_score_spritelist(n_textures, Vector(self.view_left + 500, game.SCREEN_PROPS.height - 100))
+        #                self.last_n_textures = n_textures
+        #            self.n_texture_sprites.draw()
+        #        except AttributeError:
+        #            self.last_n_textures = 0
+        #        # /TESTESTEST
+
+        # Draw the score in the upper left
+        if self.score != self.last_drawn_score:
+            self.score_sprites = self.get_score_spritelist(
+                self.score, Vector(self.view_left + 50, game.SCREEN_PROPS.height - 100)
+            )
+            self.last_drawn_score = self.score
+        self.score_sprites.draw()
+
+        # Draw lives HUD in the upper right
+        if self.player.lives != self.last_drawn_lives:
+            self.life_sprites = self.get_lives_spritelist(
+                self.MAX_PLAYER_LIVES,
+                self.player.lives,
+                Vector(
+                    self.view_left + game.SCREEN_PROPS.width - 275, game.SCREEN_PROPS.height - 100
+                ),
+            )
+            self.last_drawn_lives = self.player.lives
+        self.life_sprites.draw()
+
+        # Draw the score multiplier below the lives HUD
+        if self.score_multiplier != self.last_drawn_multiplier:
+            self.multiplier_sprites = self.get_score_spritelist(
+                self.score_multiplier,
+                Vector(
+                    self.view_left + game.SCREEN_PROPS.width - 125, game.SCREEN_PROPS.height - 150
+                ),
+                is_multiplier=True,
+            )
+            self.last_drawn_multiplier = self.score_multiplier
+        self.multiplier_sprites.draw()
+
+        # Draw map-related sprites
         self.map_sprite_lists["background"].draw()
         self.map_sprite_lists["background objects"].draw()
         self.map_sprite_lists["ground"].draw()
-        #        self.enemies.draw()
 
+        # draw objects, enemies, player...
         self.ice_cream_truck.draw()
         self.popsicles.draw()
         self.cats.draw()
         self.poofs.draw()
         self.player.draw()
 
-        # Draw the score in the upper left
-        if self.score != self.last_drawn_score:
-            self.score_sprites = self.get_score_spritelist(self.score)
-            self.last_drawn_score = self.score
-        self.score_sprites.draw()
-
-        # Draw lives HUD in the upper right
-        if self.player.lives != self.last_drawn_lives:
-            new_lives_image = self.get_lives_hud(self.MAX_PLAYER_LIVES, self.player.lives)
-            unique_str = str(new_lives_image) + str(self.game_timer) + str(time.perf_counter())
-            self.lives_texture = arcade.Texture(unique_str, new_lives_image)
-            self.last_drawn_lives = self.player.lives
-
-        with suppress(IndexError):
-            arcade.draw_texture_rectangle(
-                self.view_left + game.SCREEN_PROPS.width - 150,
-                self.view_bottom + game.SCREEN_PROPS.height - 50,
-                200,
-                50,
-                self.lives_texture,
-            )
-
-        # Draw the score multiplier below the lives HUD
-        if self.score_multiplier != self.last_drawn_score_multiplier:
-            new_score_multiplier_image = self.get_score_multiplier_image(self.score_multiplier)
-            unique_str = (
-                str(new_score_multiplier_image) + str(self.game_timer) + str(time.perf_counter())
-            )
-            self.new_score_multiplier_texture = arcade.Texture(
-                unique_str, new_score_multiplier_image
-            )
-            self.last_drawn_score_multiplier = self.score_multiplier
-
-        arcade.draw_texture_rectangle(
-            self.view_left + game.SCREEN_PROPS.width - 105,
-            self.view_bottom + game.SCREEN_PROPS.height - 120,
-            112.5,
-            56.25,
-            self.new_score_multiplier_texture,
-        )
-
-    def get_score_spritelist(self, score: int):
+    def get_score_spritelist(self, score: int, pos: Vector, is_multiplier=False):
         """
         Accepts an integer 'score' and returns a SpriteList composed of textures
         of digits of the number supplied, with positions provided to propery display the
         number 'score' upon .draw()
         """
 
-        start_x = self.view_left + 50
-        start_y = self.view_bottom + game.SCREEN_PROPS.height - 100
-        current_x = start_x
-
+        current_x = pos.x
         score_spritelist = arcade.SpriteList()
+        if is_multiplier:
+            scale = 0.70
+            digit_texture = self.score_textures.x
+            size_x, size_y = digit_texture.image.size
+            digit_sprite = arcade.Sprite(
+                texture=digit_texture,
+                center_x=current_x + size_x // 3 * scale,
+                center_y=pos.y + size_y // 3 * scale,
+                scale=scale,
+            )
+            score_spritelist.append(digit_sprite)
+            current_x += size_x // 3 * scale
+        else:
+            scale = 1
         for idx, digit_char in enumerate(str(score)):
             digit_texture = self.score_textures.digits[int(digit_char)]
             size_x, size_y = digit_texture.image.size
             digit_sprite = arcade.Sprite(
                 texture=digit_texture,
-                center_x=current_x + size_x // 3,
-                center_y=start_y + size_y // 3,
+                center_x=current_x + size_x // 3 * scale,
+                center_y=pos.y + size_y // 3 * scale,
+                scale=scale,
             )
             score_spritelist.append(digit_sprite)
-            current_x += size_x // 3
+            current_x += size_x // 3 * scale
 
         return score_spritelist
 
-    def get_score_multiplier_image(self, multiplier: int):
+    def get_lives_spritelist(self, n_max_lives: int, n_lives_left: int, pos: Vector):
         """Doc."""
 
-        img_list = [self.digit_dict["x"]] + [
-            self.digit_dict[int(digit_char)] for digit_char in str(multiplier)
-        ]
-        return crop_resize_concat_horizontally(img_list)
+        current_x = pos.x
+        spritelist = arcade.SpriteList()
+        for idx in range(n_max_lives):
+            if idx < n_lives_left:
+                texture = self.full_heart_texture
+            else:
+                texture = self.empty_heart_texture
+            size_x, size_y = texture.image.size
+            heart_sprite = arcade.Sprite(
+                texture=texture,
+                center_x=current_x + size_x // 3,
+                center_y=pos.y + size_y // 3,
+                scale=0.75,
+            )
+            spritelist.append(heart_sprite)
+            current_x += size_x // 3
 
-    def get_lives_hud(self, n_max_lives: int, n_lives_left: int):
-        """Doc."""
-
-        n_lives_lost = n_max_lives - n_lives_left
-        return crop_resize_concat_horizontally(
-            [self.full_heart_image] * n_lives_left + [self.empty_heart_image] * n_lives_lost
-        )
+        return spritelist
 
     def switch_player_cat(self, is_previous_dead=True):
         """Doc."""
@@ -1330,9 +1332,10 @@ class NewHighScoreView(arcade.View):
 
 if __name__ == "__main__":
 
-    # for PyInstaller
-    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-        os.chdir(sys._MEIPASS)  # type: ignore
+    #    # for PyInstaller
+    #    import sys, os
+    #    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    #        os.chdir(sys._MEIPASS)  # type: ignore
 
     GameWindow()
     arcade.run()
