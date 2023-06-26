@@ -4,7 +4,6 @@ Ice Cream Truck Game
 
 from contextlib import suppress
 from itertools import cycle
-from pathlib import Path
 from random import choice, random, uniform
 from types import SimpleNamespace
 
@@ -13,6 +12,7 @@ import game_constants as game
 import PIL
 from helper import Vector, load_high_scores, save_high_scores
 from sprites import (
+    ASSETS_PATH,
     BlueCat,
     CompetitorCat,
     DigitTextures,
@@ -23,17 +23,12 @@ from sprites import (
     YellowCat,
 )
 
-# Assets path
-try:
-    # Nuitka onefile
-    __compiled__  # type: ignore
-    ASSETS_PATH = Path(__file__).parent / "assets"
-except NameError:
-    ASSETS_PATH = Path("./assets")
-
 # TODO: Red: superpower is time-stop: many pops are thrown then everything slows down but the player, for a time
 # TODO: Yellow: Grows bigger with every popsicle. tramples smaller cats by pouncing. superpower is popsicle magnet for a time
 
+# TODO: yellow cat's drop ability is too powerfull. Perhaps it should be possible to activate only from jump hights not accessible by standard jumping/double jumping
+# TODO: better collision detection - make killing a bit more lenient
+# TODO: when two or more same-color cats are killed together, only one 'pop' appears - why's that? fix it!
 # TODO: add available cat thumbnails to HUD (use big cat images on sprite speadsheet
 # TODO: add sounds for: getting killed, competitor grabs popsicle, begging etc.
 # TODO: build the cats' house and the ice cream truck using free Kenney parts and PIL
