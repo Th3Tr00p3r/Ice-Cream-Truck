@@ -1,45 +1,38 @@
 ---
-
 repos:
-    - repo: local
-      hooks:
-          - id: unittest
-            name: unittest
-            entry: python -m unittest discover
-            language: python
-            types: [python]
-            pass_filenames: false
-            stages: [commit]
-            additional_dependencies: [numpy]
+  - repo: local
+    hooks:
+      - id: unittest
+        name: unittest
+        entry: python -m unittest discover
+        language: python
+        types: [python]
+        pass_filenames: false
+        stages: [commit]
+        additional_dependencies: [numpy]
 
-    - repo: https://github.com/pycqa/isort
-      rev: 5.9.3
-      hooks:
-          - id: isort
-            args: [--profile, black, --filter-files]
-            exclude: ^notebooks
+  - repo: https://github.com/psf/black
+    rev: 23.3.0
+    hooks:
+      - id: black
+        language_version: python3.10
 
-    - repo: https://github.com/ambv/black
-      rev: 21.9b0
-      hooks:
-          - id: black
-            language_version: python3.9
+  - repo: https://github.com/pycqa/isort
+    rev: 5.12.0
+    hooks:
+      - id: isort
+        args: [--profile, black, --filter-files]
+        exclude: ^notebooks
 
-    - repo: https://gitlab.com/pycqa/flake8
-      rev: 3.9.2
-      hooks:
-          - id: flake8
-            exclude: ^notebooks
+  - repo: https://github.com/pycqa/flake8
+    rev: 6.0.0
+    hooks:
+      - id: flake8
+        exclude: ^notebooks
 
-    - repo: https://github.com/jumanjihouse/pre-commit-hook-yamlfmt
-      rev: 0.1.0   # or specific tag
-      hooks:
-          - id: yamlfmt
-            args: [--width, '150']
-
-    - repo: https://github.com/pre-commit/mirrors-mypy
-      rev: v1.3.0
-      hooks:
-          - id: mypy
-            args: [--no-strict-optional, --ignore-missing-imports]
-            exclude: ^notebooks
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.3.0
+    hooks:
+      - id: mypy
+        args: [--no-strict-optional, --ignore-missing-imports]
+        exclude: ^notebooks
