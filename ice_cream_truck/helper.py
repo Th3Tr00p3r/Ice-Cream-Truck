@@ -18,12 +18,11 @@ class Limits:
 
     def __init__(
         self,
-        limits=(np.NINF, np.inf),
+        limits=(-np.inf, np.inf),
         upper=np.inf,
         dict_labels: Tuple[str, str] = None,
         from_string=False,
     ):
-
         self.dict_labels = dict_labels
 
         if from_string:
@@ -270,7 +269,6 @@ def tint_greyscale_pixels(
     linear_beta: tuple = (0.8, 1.05),
     **kwargs,
 ) -> PIL.Image:
-
     rgb_color = PIL.ImageColor.getrgb(color)
 
     img_arr = np.array(img)

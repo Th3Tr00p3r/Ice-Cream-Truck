@@ -1,0 +1,82 @@
+"""High-score persistence (helper) and the new-high-score ranking logic (NewHighScoreView)."""
+
+import pickle
+from types import SimpleNamespace
+
+from helper import load_high_scores, save_high_scores
+
+import ice_cream_truck as ict
+from tests.support import GameTestCase
+
+DEFAULT = [("???", 0)] * 3
+
+
+class TestPersistence(GameTestCase):
+    def test_load_defaults_when_file_missing(self):
+        self.assertFalse(self.high_scores_file.exists())
+        self.assertEqual(load_high_scores(), DEFAULT)
+        self.assertFalse(self.high_scores_file.exists())  # loading does not create the file
+
+    def test_save_then_load_roundtrip(self):
+        scores = [("ANN", 300), ("BOB", 200), ("CAT", 100)]
+        save_high_scores(scores)
+        self.assertTrue(self.high_scores_file.exists())
+        self.assertEqual(load_high_scores(), scores)
+
+    def test_file_is_a_pickled_list(self):
+        save_high_scores([("A", 3), ("B", 2), ("C", 1)])
+        with open(self.high_scores_file, "rb") as f:
+            self.assertEqual(pickle.load(f), [("A", 3), ("B", 2), ("C", 1)])
+
+    def test_save_overwrites(self):
+        save_high_scores([("A", 3), ("B", 2), ("C", 1)])
+        save_high_scores([("Z", 9), ("Y", 8), ("X", 7)])
+        self.assertEqual(load_high_scores(), [("Z", 9), ("Y", 8), ("X", 7)])
+
+
+def _rank(current, name, score):
+    """Run NewHighScoreView.update_high_scores against a minimal game view"""
+    game_view = SimpleNamespace(score=score, high_scores_list=list(current))
+    view = ict.NewHighScoreView(game_view)
+    view.new_name = name
+    view.update_high_scores()
+    return game_view.high_scores_list
+
+
+class TestRanking(GameTestCase):
+    def test_ranking_keeps_top_three(self):
+        cases = [
+            (DEFAULT, "ABC", 50, [("ABC", 50), ("???", 0), ("???", 0)]),
+            (
+                [("A", 300), ("B", 200), ("C", 100)],
+                "NEW",
+                250,
+                [("A", 300), ("NEW", 250), ("B", 200)],
+            ),
+            (
+                [("A", 300), ("B", 200), ("C", 100)],
+                "TOP",
+                999,
+                [("TOP", 999), ("A", 300), ("B", 200)],
+            ),
+            (
+                [("A", 300), ("B", 200), ("C", 100)],
+                "LOW",
+                150,
+                [("A", 300), ("B", 200), ("LOW", 150)],
+            ),
+            # equal scores are ordered by name, descending
+            ([("A", 300), ("B", 200), ("C", 100)], "Z", 200, [("A", 300), ("Z", 200), ("B", 200)]),
+            ([("A", 300), ("M", 200), ("C", 100)], "B", 200, [("A", 300), ("M", 200), ("B", 200)]),
+        ]
+        for current, name, score, expected in cases:
+            with self.subTest(current=current, name=name, score=score):
+                self.isolate()
+                self.assertEqual(_rank(current, name, score), expected)
+
+    def test_ranking_is_saved_to_file(self):
+        ranked = _rank(DEFAULT, "ME", 10)
+        self.assertTrue(load_high_scores() == ranked == [("ME", 10), ("???", 0), ("???", 0)])
+
+    def test_empty_name_is_allowed(self):
+        self.assertEqual(_rank(DEFAULT, "", 10)[0], ("", 10))

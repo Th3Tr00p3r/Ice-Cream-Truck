@@ -20,6 +20,7 @@ FRICTION = 0.9
 
 # Window dimensions
 SCREEN_PROPS = ScreenProps(1600, 800)
+SCREEN_RECT = arcade.LBWH(0, 0, SCREEN_PROPS.width, SCREEN_PROPS.height)
 SCREEN_TITLE = "Ice Cream Truck"
 
 # Viewport margins
