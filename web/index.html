@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ice Cream Truck</title>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.29.4/full/pyodide.js"></script>
+    <style>
+        body { margin: 0; background: #000; }
+        #status { position: fixed; top: 10px; left: 10px; color: #fff; font: 16px sans-serif; }
+    </style>
+</head>
+<body>
+    <div id="status">Loading...</div>
+    <canvas id="pygletCanvas"></canvas>
+    <script>
+        const statusDiv = document.getElementById("status");
+        const t0 = performance.now();
+        function step(msg) {
+            const line = `[${((performance.now() - t0) / 1000).toFixed(1)}s] ${msg}`;
+            statusDiv.textContent = line;
+            console.log(line);
+        }
+
+        async function main() {
+            step("Loading Pyodide");
+            const pyodide = window.pyodide = await loadPyodide();
+            step("Loading numpy, pillow");
+            await pyodide.loadPackage(["micropip", "numpy", "pillow"]);
+            step("Installing arcade");
+            await pyodide.pyimport("micropip").install("arcade==4.0.0.dev7");
+            step("Unpacking game");
+            const zip = await (await fetch("game.zip")).arrayBuffer();
+            pyodide.unpackArchive(zip, "zip", { extractDir: "/home/pyodide/game" });
+            step("Starting game");
+            await pyodide.runPythonAsync(`
+import os, runpy, sys
+import arcade, pyglet
+arcade.run = lambda view=None: pyglet.app.run(1 / 60)  # arcade 4.0.0.dev7 passes None, which never starts the browser draw loop
+os.chdir("/home/pyodide/game")
+sys.path.insert(0, "/home/pyodide/game")
+runpy.run_path("ice_cream_truck.py", run_name="__main__")
+`);
+            step("Running");
+        }
+        main().catch((err) => { step("Error: " + err.message); console.error(err); });
+    </script>
+</body>
+</html>
