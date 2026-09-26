@@ -45,15 +45,15 @@ class GameWindow(arcade.Window):
             fullscreen=False,
         )
         arcade.resources.load_kenney_fonts()
-        self.camera = arcade.Camera2D()
+        self.game_camera = arcade.Camera2D()
         self.center_window()
         self.show_view(TitleView())
 
     def use_camera(self, left=0, bottom=0):
         """Draw from here on with (left, bottom) as the view's bottom-left corner"""
 
-        self.camera.bottom_left = left, bottom
-        self.camera.use()
+        self.game_camera.bottom_left = left, bottom
+        self.game_camera.use()
 
     def on_key_press(self, key, modifiers):
         """Called whenever a key is pressed."""
@@ -65,7 +65,7 @@ class GameWindow(arcade.Window):
             # Instead of a one-to-one mapping, stretch/squash window to match the
             # constants. This does NOT respect aspect ratio. You'd need to
             # do a bit of math for that.
-            self.camera.match_window(projection=False)
+            self.game_camera.match_window(projection=False)
 
 
 class PlatformerView(arcade.View):
