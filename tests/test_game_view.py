@@ -259,7 +259,7 @@ class TestCompetitors(GameViewTestCase):
         self.assertIn(cat.color_str, game.COLORS - game.PLAYER_COLORS)
         self.assertIn(cat.center_x, (0, game.SCREEN_PROPS.width))
         self.assertTrue(0 <= cat.center_y <= game.SCREEN_PROPS.height / 2)
-        self.assertTrue(game.CHARACTER_SCALING <= cat.scale <= game.CHARACTER_SCALING * 1.5)
+        self.assertTrue(game.CHARACTER_SCALING <= cat.scale_x <= game.CHARACTER_SCALING * 1.5)
         self.assertTrue(75 <= cat.speeds.RUN <= 125)
         h.run_frames(v, 5)
         self.assertEqual(v.n_cats, 1)  # capped by n_allowed_cats
@@ -634,7 +634,7 @@ class TestHud(GameViewTestCase):
         sprites = self.game_view.get_score_spritelist(3, Vector(50, 700), is_multiplier=True)
         self.assertEqual(len(sprites), 2)
         self.assertIs(sprites[0].texture, self.game_view.score_textures.x)
-        self.assertEqual(sprites[0].scale, approx(0.7))
+        self.assertEqual(sprites[0].scale_x, approx(0.7))
 
     def test_lives_spritelist(self):
         sprites = self.game_view.get_lives_spritelist(5, 2, Vector(100, 100))

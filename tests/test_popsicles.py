@@ -23,8 +23,8 @@ class TestThrowKinematics(GameTestCase):
                 self.assertEqual(pop.change_y, approx(400 * math.sin(math.radians(angle))))
 
     def test_spin_direction_follows_horizontal_direction(self):
-        self.assertEqual(_pop(speed=300, angle=45).change_angle, 300)  # thrown left
-        self.assertEqual(_pop(speed=300, angle=135).change_angle, -300)  # thrown right
+        self.assertEqual(_pop(speed=300, angle=45).change_angle, -300)  # left (clockwise in 3.x)
+        self.assertEqual(_pop(speed=300, angle=135).change_angle, 300)  # thrown right
 
     def test_move_applies_gravity_and_velocity(self):
         pop = _pop(speed=0, angle=90)

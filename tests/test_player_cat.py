@@ -51,7 +51,7 @@ class TestStats(GameViewTestCase):
                 s = cat.speeds
                 self.assertEqual((s.RUN, s.SLIDE, s.JUMP, s.POUNCE), speeds)
                 self.assertEqual(cat.acceleration_magnitude, approx(accel))
-                self.assertEqual(cat.scale, approx(scale))
+                self.assertEqual(cat.scale_x, approx(scale))
 
     def test_abilities(self):
         blue, red, yellow = (

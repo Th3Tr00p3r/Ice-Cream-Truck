@@ -18,7 +18,7 @@ class Limits:
 
     def __init__(
         self,
-        limits=(np.NINF, np.inf),
+        limits=(-np.inf, np.inf),
         upper=np.inf,
         dict_labels: Tuple[str, str] = None,
         from_string=False,

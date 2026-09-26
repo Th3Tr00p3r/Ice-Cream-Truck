@@ -9,6 +9,7 @@ import arcade
 import game_constants as game
 import numpy as np
 import PIL
+from arcade.hitbox import RotatableHitBox, algo_detailed
 from helper import Limits, Vector, get_aura_image, tint_greyscale_pixels
 
 # Assets path
@@ -20,6 +21,14 @@ except NameError:
     ASSETS_PATH = Path("./assets")
 
 TexturePair = namedtuple("TexturePair", "RIGHT LEFT")
+
+
+def load_detailed_texture(filepath):
+    """Load (or get cached) texture with a detailed hit box"""
+
+    return arcade.texture.default_texture_cache.load_or_get_texture(
+        filepath, hit_box_algorithm=algo_detailed
+    )
 
 
 class SpriteMixin:
@@ -53,7 +62,7 @@ class SpriteMixin:
             texture_name += f"_{aura_color}"
 
         # return a texture
-        return arcade.Texture(texture_name, img)
+        return arcade.Texture(img, hash=texture_name)
 
     def load_texture_pair(self, filepath, **kwargs):
         """
@@ -161,7 +170,7 @@ class PopsicleColorTextures(SpriteMixin):
             arr_img[:, int(w * (1 - x_factor / 2)) :, 3] = 0
             image = PIL.Image.fromarray(arr_img)
             texture_name = f"{self.color_str}_popsicle_melting_{idx}"
-            melt_textures.append(arcade.Texture(texture_name, image))
+            melt_textures.append(arcade.Texture(image, hash=texture_name))
 
         return SimpleNamespace(
             standing=standing_texture,
@@ -230,6 +239,15 @@ class BasicSprite(arcade.Sprite, SpriteMixin):
 
         self.is_off_screen = False
 
+    def set_hit_box_points(self, points):
+        """Set the hit box from a list of points"""
+
+        if points is self.hit_box.points:
+            return
+        self.hit_box = RotatableHitBox(
+            points, position=self.position, angle=self.angle, scale=self.scale
+        )
+
 
 class Poof(BasicSprite):
     """Doc."""
@@ -245,7 +263,7 @@ class Poof(BasicSprite):
         **kwargs,
     ):
         # TODO: perhaps there's no need for initial textures!
-        super().__init__(init_position, hit_box_algorithm=None, scale=self.BASE_SCALE, **kwargs)
+        super().__init__(init_position, scale=self.BASE_SCALE, **kwargs)
 
         self.loaded_textures = [
             self.load_texture(self.MAIN_TEXTURE_PATH / f"poof{i}.png", color=color_str)
@@ -308,8 +326,7 @@ class CompetitorCat(BasicSprite):
     ):
         super().__init__(
             init_position,
-            filename=ASSETS_PATH / "images" / "cat" / "standing1.png",
-            hit_box_algorithm="Detailed",
+            path_or_texture=load_detailed_texture(ASSETS_PATH / "images" / "cat" / "standing1.png"),
             scale=scale,
             **kwargs,
         )
@@ -390,9 +407,9 @@ class CompetitorCat(BasicSprite):
         self.texture_type = texture_type
 
         if change_hitbox:
-            self.hit_box = getattr(self.hitboxes, texture_type)
+            self.set_hit_box_points(getattr(self.hitboxes, texture_type))
         else:  # use default hitbox
-            self.hit_box = self.init_hitbox
+            self.set_hit_box_points(self.init_hitbox)
 
     def update_animation(self, delta_time: float):
         """Doc."""
@@ -517,7 +534,7 @@ class CompetitorCat(BasicSprite):
         """Doc."""
 
         poof = self.poof_dict[self.color_str]
-        poof.reset(Vector(self.center_x, self.center_y - self.height / 3), self.scale)
+        poof.reset(Vector(self.center_x, self.center_y - self.height / 3), self.scale_x)
         return poof
 
 
@@ -563,8 +580,7 @@ class PlayerCat(BasicSprite):
 
         super().__init__(
             init_position,
-            filename=self.MAIN_TEXTURE_PATH / "running1.png",
-            hit_box_algorithm="Detailed",
+            path_or_texture=load_detailed_texture(self.MAIN_TEXTURE_PATH / "running1.png"),
             **kwargs,
         )
 
@@ -793,9 +809,9 @@ class PlayerCat(BasicSprite):
         self.texture_type = texture_type
 
         if change_hitbox:
-            self.hit_box = getattr(self.hitboxes, texture_type)
+            self.set_hit_box_points(getattr(self.hitboxes, texture_type))
         else:  # use default hitbox
-            self.hit_box = self.init_hitbox
+            self.set_hit_box_points(self.init_hitbox)
 
     def update_animation(self, delta_time: float):  # NOQA # C901
         """Doc."""
@@ -839,21 +855,21 @@ class PlayerCat(BasicSprite):
 
             if self.physics_engine.jumps_since_ground >= 2:
                 if self.change_y > -5:
-                    self.change_angle = -self.face_direction * self.spin_speed
+                    self.change_angle = self.face_direction * self.spin_speed
                 else:
                     self.angle = 0
 
         # pounce animation
         elif self.state.pounce.is_pouncing:
             if self.can_pounce_kill or self.can_swipe:  # BlueCat and YellowCat
-                self.angle = -self.move_state * 20
+                self.angle = self.move_state * 20
                 self.change_texture_and_hitbox("scratching", change_hitbox=True)
             else:  # RedCat
                 self.change_texture_and_hitbox("pouncing", change_hitbox=True)
 
         # air-dash animation (RedCat)
         elif self.state.air_dash.is_dashing:
-            self.angle = -self.move_state * 20
+            self.angle = self.move_state * 20
             self.change_texture_and_hitbox("scratching", change_hitbox=True)
 
         # Running animation
@@ -976,7 +992,7 @@ class PlayerCat(BasicSprite):
 
         # pounce-swipe (YellowCat)
         elif self.can_swipe and self.state.pounce.is_pouncing:
-            if cat.scale * 0.9 < self.scale < cat.scale * 1.1:
+            if cat.scale_x * 0.9 < self.scale_x < cat.scale_x * 1.1:
                 return True
 
         elif self.state.air_dash.is_dashing:
@@ -1012,7 +1028,7 @@ class PlayerCat(BasicSprite):
         """Doc."""
 
         poof = self.poof_sprite
-        poof.reset(Vector(self.center_x, self.center_y - self.height / 3), self.scale)
+        poof.reset(Vector(self.center_x, self.center_y - self.height / 3), self.scale_x)
         return poof
 
     def die(self):
@@ -1154,7 +1170,7 @@ class Popsicle(BasicSprite):
 
         self.change_x = x_speed
         self.change_y = y_speed
-        self.change_angle = -math.copysign(1, x_speed) * throw_speed_ppf
+        self.change_angle = math.copysign(1, x_speed) * throw_speed_ppf
 
         self.color_str: str = None
         self.is_on_ground = False
@@ -1280,7 +1296,7 @@ class IceCreamTruck(BasicSprite):
 
     def __init__(self, init_position: Vector, **kwargs):
         super().__init__(
-            init_position, filename=self.MAIN_TEXTURE_PATH / "truckIceCream1.png", **kwargs
+            init_position, path_or_texture=self.MAIN_TEXTURE_PATH / "truckIceCream1.png", **kwargs
         )
 
         # Default to face-right

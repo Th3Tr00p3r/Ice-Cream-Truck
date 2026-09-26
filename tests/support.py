@@ -141,7 +141,7 @@ class GameTestCase(unittest.TestCase):
         return view
 
     def _reset_viewport(self):
-        self.window.set_viewport(0, game.SCREEN_PROPS.width, 0, game.SCREEN_PROPS.height)
+        self.window.use_camera()
 
     def _check_real_high_scores(self):
         if _file_digest(REAL_HIGH_SCORES) != REAL_HIGH_SCORES_DIGEST:

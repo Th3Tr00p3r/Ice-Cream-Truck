@@ -9,7 +9,6 @@ from types import SimpleNamespace
 
 import arcade
 import game_constants as game
-import PIL
 from helper import Vector, load_high_scores, save_high_scores
 from sprites import (
     ASSETS_PATH,
@@ -45,8 +44,16 @@ class GameWindow(arcade.Window):
             title=game.SCREEN_TITLE,
             fullscreen=False,
         )
+        arcade.resources.load_kenney_fonts()
+        self.camera = arcade.Camera2D()
         self.center_window()
         self.show_view(TitleView())
+
+    def use_camera(self, left=0, bottom=0):
+        """Draw from here on with (left, bottom) as the view's bottom-left corner"""
+
+        self.camera.bottom_left = left, bottom
+        self.camera.use()
 
     def on_key_press(self, key, modifiers):
         """Called whenever a key is pressed."""
@@ -58,7 +65,7 @@ class GameWindow(arcade.Window):
             # Instead of a one-to-one mapping, stretch/squash window to match the
             # constants. This does NOT respect aspect ratio. You'd need to
             # do a bit of math for that.
-            self.set_viewport(0, game.SCREEN_PROPS.width, 0, game.SCREEN_PROPS.height)
+            self.camera.match_window(projection=False)
 
 
 class PlatformerView(arcade.View):
@@ -92,11 +99,11 @@ class PlatformerView(arcade.View):
         self.score_multiplier: int
 
         # lives
-        self.empty_heart_texture = arcade.Texture(
-            "empty heart", PIL.Image.open(ASSETS_PATH / "images" / "HUD" / "hudHeart_empty.png")
+        self.empty_heart_texture = arcade.load_texture(
+            ASSETS_PATH / "images" / "HUD" / "hudHeart_empty.png"
         )
-        self.full_heart_texture = arcade.Texture(
-            "full heart", PIL.Image.open(ASSETS_PATH / "images" / "HUD" / "hudHeart_full.png")
+        self.full_heart_texture = arcade.load_texture(
+            ASSETS_PATH / "images" / "HUD" / "hudHeart_full.png"
         )
         self.last_drawn_lives: int = None
 
@@ -129,7 +136,7 @@ class PlatformerView(arcade.View):
         map_path = ASSETS_PATH / map_name
 
         # Load the current map
-        map = arcade.tilemap.TileMap(map_path, scaling=game.MAP_SCALING)
+        map = arcade.load_tilemap(map_path, scaling=game.MAP_SCALING)
 
         # What are the names of the layers?
         layer_names = ["ground", "background", "background objects"]
@@ -508,16 +515,9 @@ class PlatformerView(arcade.View):
         self.view_bottom = int(self.view_bottom)
         self.view_left = int(self.view_left)
 
-        # Do the scrolling
-        arcade.set_viewport(
-            left=self.view_left,
-            right=game.SCREEN_PROPS.width + self.view_left,
-            bottom=self.view_bottom,
-            top=game.SCREEN_PROPS.height + self.view_bottom,
-        )
-
     def on_draw(self) -> None:
-        arcade.start_render()
+        self.clear()
+        self.window.use_camera(self.view_left, self.view_bottom)
 
         #        # TESTESTEST - TextureAtlas investigation
         #        n_textures = len(self.window.ctx.default_atlas._textures)
@@ -568,11 +568,11 @@ class PlatformerView(arcade.View):
         self.map_sprite_lists["ground"].draw()
 
         # draw objects, enemies, player...
-        self.ice_cream_truck.draw()
+        arcade.draw_sprite(self.ice_cream_truck)
         self.popsicles.draw()
         self.cats.draw()
         self.poofs.draw()
-        self.player.draw()
+        arcade.draw_sprite(self.player)
 
     def get_score_spritelist(self, score: int, pos: Vector, is_multiplier=False):
         """
@@ -588,7 +588,7 @@ class PlatformerView(arcade.View):
             digit_texture = self.score_textures.x
             size_x, size_y = digit_texture.image.size
             digit_sprite = arcade.Sprite(
-                texture=digit_texture,
+                digit_texture,
                 center_x=current_x + size_x // 3 * scale,
                 center_y=pos.y + size_y // 3 * scale,
                 scale=scale,
@@ -601,7 +601,7 @@ class PlatformerView(arcade.View):
             digit_texture = self.score_textures.digits[int(digit_char)]
             size_x, size_y = digit_texture.image.size
             digit_sprite = arcade.Sprite(
-                texture=digit_texture,
+                digit_texture,
                 center_x=current_x + size_x // 3 * scale,
                 center_y=pos.y + size_y // 3 * scale,
                 scale=scale,
@@ -623,7 +623,7 @@ class PlatformerView(arcade.View):
                 texture = self.empty_heart_texture
             size_x, size_y = texture.image.size
             heart_sprite = arcade.Sprite(
-                texture=texture,
+                texture,
                 center_x=current_x + size_x // 3,
                 center_y=pos.y + size_y // 3,
                 scale=0.75,
@@ -664,7 +664,7 @@ class PlatformerView(arcade.View):
 
         self.physics_engine = arcade.PhysicsEnginePlatformer(
             player_sprite=self.player,
-            platforms=self.map_sprite_lists["ground"],
+            walls=self.map_sprite_lists["ground"],
             gravity_constant=game.GRAVITY,
         )
 
@@ -703,7 +703,7 @@ class TitleView(arcade.View):
 
         # define texts
         text_kwargs = dict(
-            start_x=0,
+            x=0,
             font_name="Kenney Pixel Square",
             multiline=True,
             width=game.SCREEN_PROPS.width,
@@ -712,7 +712,7 @@ class TitleView(arcade.View):
 
         self.title_text = arcade.Text(
             "Ice-Cream Truck",
-            start_y=game.SCREEN_PROPS.height - 150,
+            y=game.SCREEN_PROPS.height - 150,
             color=arcade.color.MAGENTA,
             font_size=game.DEFAULT_FONT_SIZE + 15,
             **text_kwargs,
@@ -720,7 +720,7 @@ class TitleView(arcade.View):
 
         self.title_shade = arcade.Text(
             " Ice-Cream Truck",
-            start_y=game.SCREEN_PROPS.height - 156,
+            y=game.SCREEN_PROPS.height - 156,
             color=arcade.color.WHITE,
             font_size=game.DEFAULT_FONT_SIZE + 15,
             **text_kwargs,
@@ -729,7 +729,7 @@ class TitleView(arcade.View):
         # define blinking text
         self.blinking_text = arcade.Text(
             "'Enter' to Start\n'H' for High Scores\n'I' for Instructions\n'Esc' to quit",
-            start_y=game.SCREEN_PROPS.height // 2 - 200,
+            y=game.SCREEN_PROPS.height // 2 - 200,
             color=arcade.color.MAGENTA,
             font_size=game.DEFAULT_FONT_SIZE - 15,
             **text_kwargs,
@@ -737,7 +737,7 @@ class TitleView(arcade.View):
 
         self.blinking_shade = arcade.Text(
             " 'Enter' to Start\n 'H' for High Scores\n 'I' for Instructions\n 'Esc' to quit",
-            start_y=game.SCREEN_PROPS.height // 2 - 206,
+            y=game.SCREEN_PROPS.height // 2 - 206,
             color=arcade.color.WHITE,
             font_size=game.DEFAULT_FONT_SIZE - 15,
             **text_kwargs,
@@ -745,7 +745,7 @@ class TitleView(arcade.View):
 
         self.loading_text = arcade.Text(
             "Loading...",
-            start_y=game.SCREEN_PROPS.height // 2 - 250,
+            y=game.SCREEN_PROPS.height // 2 - 250,
             color=arcade.color.MAGENTA,
             font_size=game.DEFAULT_FONT_SIZE,
             **text_kwargs,
@@ -753,7 +753,7 @@ class TitleView(arcade.View):
 
         self.loading_shade = arcade.Text(
             " Loading...",
-            start_y=game.SCREEN_PROPS.height // 2 - 256,
+            y=game.SCREEN_PROPS.height // 2 - 256,
             color=arcade.color.WHITE,
             font_size=game.DEFAULT_FONT_SIZE,
             **text_kwargs,
@@ -787,13 +787,11 @@ class TitleView(arcade.View):
 
     def on_draw(self) -> None:
         # Start the rendering loop
-        arcade.start_render()
+        self.clear()
 
         # Draw a rectangle filled with our title image
-        arcade.draw_texture_rectangle(
-            **game.SCREEN_PROPS.as_dict(),
-            texture=self.title_image,
-        )
+        self.window.use_camera()
+        arcade.draw_texture_rect(self.title_image, game.SCREEN_RECT)
 
         # draw title text
         self.title_shade.draw()
@@ -847,8 +845,8 @@ class InstructionsView(arcade.View):
         self.text_list = [
             arcade.Text(
                 "Instructions / Keys",
-                start_x=0,
-                start_y=game.SCREEN_PROPS.height - 150,
+                x=0,
+                y=game.SCREEN_PROPS.height - 150,
                 color=arcade.color.BLACK,
                 font_size=game.DEFAULT_FONT_SIZE + 5,
                 font_name="Kenney Pixel Square",
@@ -857,8 +855,8 @@ class InstructionsView(arcade.View):
             ),
             arcade.Text(
                 "Move - LEFT/RIGHT\nJump - SPACE\nPounce - DOWN (running at full speed)\nSwitch Cat: Z\nSuper Power - lCtrl\n\nCollect as many popsicles as you can!",
-                start_x=100,
-                start_y=game.SCREEN_PROPS.height - 300,
+                x=100,
+                y=game.SCREEN_PROPS.height - 300,
                 color=arcade.color.BLACK,
                 font_size=game.DEFAULT_FONT_SIZE - 10,
                 font_name="Kenney Pixel Square",
@@ -870,18 +868,16 @@ class InstructionsView(arcade.View):
 
     def on_draw(self) -> None:
         # Draw a rectangle filled with the instructions image
-        arcade.draw_texture_rectangle(
-            **game.SCREEN_PROPS.as_dict(),
-            texture=self.background_image,
-        )
+        self.window.use_camera()
+        arcade.draw_texture_rect(self.background_image, game.SCREEN_RECT)
 
         # cover the image in semitransparent white
-        arcade.draw_lrtb_rectangle_filled(
+        arcade.draw_lrbt_rectangle_filled(
             left=0,
             right=game.SCREEN_PROPS.width,
             top=game.SCREEN_PROPS.height,
             bottom=0,
-            color=arcade.make_transparent_color(arcade.color.WHITE, transparency=200),
+            color=arcade.color.WHITE.replace(a=200),
         )
 
         # draw text
@@ -905,7 +901,7 @@ class HighScoresView(arcade.View):
         self.background_image = arcade.load_texture(ASSETS_PATH / "images" / "background_image.png")
 
         # Store a semi-transparent color to use as an overlay
-        self.fill_color = arcade.make_transparent_color(arcade.color.WHITE, transparency=150)
+        self.fill_color = arcade.color.WHITE.replace(a=150)
 
         # define texts
         name_score_str_list = [
@@ -913,7 +909,7 @@ class HighScoresView(arcade.View):
             for idx, (name, score) in enumerate(self.title_view.high_scores_list)
         ]
         text_kwargs = dict(
-            start_x=0,
+            x=0,
             font_name="Kenney Pixel Square",
             multiline=True,
             width=game.SCREEN_PROPS.width,
@@ -922,42 +918,42 @@ class HighScoresView(arcade.View):
         self.text_list = [
             arcade.Text(
                 "Ice-Cream Truck",
-                start_y=game.SCREEN_PROPS.height - 150,
+                y=game.SCREEN_PROPS.height - 150,
                 color=arcade.color.MAGENTA,
                 font_size=game.DEFAULT_FONT_SIZE + 15,
                 **text_kwargs,
             ),
             arcade.Text(
                 " Ice-Cream Truck",
-                start_y=game.SCREEN_PROPS.height - 156,
+                y=game.SCREEN_PROPS.height - 156,
                 color=arcade.color.WHITE,
                 font_size=game.DEFAULT_FONT_SIZE + 15,
                 **text_kwargs,
             ),
             arcade.Text(
                 "High Scores:\n" + "\n".join(name_score_str_list),
-                start_y=game.SCREEN_PROPS.height - 300,
+                y=game.SCREEN_PROPS.height - 300,
                 color=arcade.color.BLACK,
                 font_size=game.DEFAULT_FONT_SIZE,
                 **text_kwargs,
             ),
             arcade.Text(
                 " High Scores:\n" + "\n".join([f" {str_}" for str_ in name_score_str_list]),
-                start_y=game.SCREEN_PROPS.height - 306,
+                y=game.SCREEN_PROPS.height - 306,
                 color=arcade.color.MAGENTA,
                 font_size=game.DEFAULT_FONT_SIZE,
                 **text_kwargs,
             ),
             arcade.Text(
                 "Press any key",
-                start_y=game.SCREEN_PROPS.height - 700,
+                y=game.SCREEN_PROPS.height - 700,
                 color=arcade.color.MAGENTA,
                 font_size=game.DEFAULT_FONT_SIZE - 15,
                 **text_kwargs,
             ),
             arcade.Text(
                 " Press any key",
-                start_y=game.SCREEN_PROPS.height - 706,
+                y=game.SCREEN_PROPS.height - 706,
                 color=arcade.color.WHITE,
                 font_size=game.DEFAULT_FONT_SIZE - 15,
                 **text_kwargs,
@@ -968,14 +964,12 @@ class HighScoresView(arcade.View):
         """Draw the underlying screen, blurred, then the game over text"""
 
         # Draw a rectangle filled with the instructions image
-        arcade.draw_texture_rectangle(
-            **game.SCREEN_PROPS.as_dict(),
-            texture=self.background_image,
-        )
+        self.window.use_camera()
+        arcade.draw_texture_rect(self.background_image, game.SCREEN_RECT)
 
         # Now create a filled rect that covers the current viewport
         # We get the viewport size from the game view
-        arcade.draw_lrtb_rectangle_filled(
+        arcade.draw_lrbt_rectangle_filled(
             left=0,
             right=game.SCREEN_PROPS.width,
             top=game.SCREEN_PROPS.height,
@@ -1011,11 +1005,11 @@ class PauseView(arcade.View):
         self.game_view = game_view
 
         # Store a semi-transparent color to use as an overlay
-        self.fill_color = arcade.make_transparent_color(arcade.color.WHITE, transparency=150)
+        self.fill_color = arcade.color.WHITE.replace(a=150)
 
         # define pause text
         text_kwargs = dict(
-            start_x=0,
+            x=0,
             font_name="Kenney Pixel Square",
             multiline=True,
             width=game.SCREEN_PROPS.width,
@@ -1024,7 +1018,7 @@ class PauseView(arcade.View):
 
         self.pause_text = arcade.Text(
             "PAUSED\nPRESS 'P' OR 'Esc' TO CONTINUE",
-            start_y=game.SCREEN_PROPS.height // 2,
+            y=game.SCREEN_PROPS.height // 2,
             color=arcade.color.MAGENTA,
             font_size=game.DEFAULT_FONT_SIZE,
             **text_kwargs,
@@ -1032,7 +1026,7 @@ class PauseView(arcade.View):
 
         self.pause_shade = arcade.Text(
             " PAUSED\n PRESS 'P' OR 'Esc' TO CONTINUE",
-            start_y=game.SCREEN_PROPS.height // 2 - 6,
+            y=game.SCREEN_PROPS.height // 2 - 6,
             color=arcade.color.WHITE,
             font_size=game.DEFAULT_FONT_SIZE,
             **text_kwargs,
@@ -1042,12 +1036,12 @@ class PauseView(arcade.View):
         """Draw the underlying screen, blurred, then the Paused text"""
 
         # First, draw the underlying view
-        # This also calls start_render(), so no need to do it again
+        # This also calls clear(), so no need to do it again
         self.game_view.on_draw()
 
         # Now create a filled rect that covers the current viewport
         # We get the viewport size from the game view
-        arcade.draw_lrtb_rectangle_filled(
+        arcade.draw_lrbt_rectangle_filled(
             left=self.game_view.view_left,
             right=self.game_view.view_left + game.SCREEN_PROPS.width,
             top=self.game_view.view_bottom + game.SCREEN_PROPS.height,
@@ -1081,14 +1075,14 @@ class GameOverView(arcade.View):
         self.game_view = game_view
 
         # Store a semi-transparent color to use as an overlay
-        self.fill_color = arcade.make_transparent_color(arcade.color.WHITE, transparency=150)
+        self.fill_color = arcade.color.WHITE.replace(a=150)
 
         # define texts
         name_score_str_list = [
             f"{name} - {score}" for idx, (name, score) in enumerate(self.game_view.high_scores_list)
         ]
         text_kwargs = dict(
-            start_x=0,
+            x=0,
             font_name="Kenney Pixel Square",
             multiline=True,
             width=game.SCREEN_PROPS.width,
@@ -1097,42 +1091,42 @@ class GameOverView(arcade.View):
         self.text_list = [
             arcade.Text(
                 "Game Over!",
-                start_y=game.SCREEN_PROPS.height - 150,
+                y=game.SCREEN_PROPS.height - 150,
                 color=arcade.color.MAGENTA,
                 font_size=game.DEFAULT_FONT_SIZE + 15,
                 **text_kwargs,
             ),
             arcade.Text(
                 " Game Over!",
-                start_y=game.SCREEN_PROPS.height - 156,
+                y=game.SCREEN_PROPS.height - 156,
                 color=arcade.color.WHITE,
                 font_size=game.DEFAULT_FONT_SIZE + 15,
                 **text_kwargs,
             ),
             arcade.Text(
                 "High Scores:\n" + "\n".join(name_score_str_list),
-                start_y=game.SCREEN_PROPS.height - 300,
+                y=game.SCREEN_PROPS.height - 300,
                 color=arcade.color.BLACK,
                 font_size=game.DEFAULT_FONT_SIZE,
                 **text_kwargs,
             ),
             arcade.Text(
                 " High Scores:\n" + "\n".join([f" {str_}" for str_ in name_score_str_list]),
-                start_y=game.SCREEN_PROPS.height - 306,
+                y=game.SCREEN_PROPS.height - 306,
                 color=arcade.color.MAGENTA,
                 font_size=game.DEFAULT_FONT_SIZE,
                 **text_kwargs,
             ),
             arcade.Text(
                 "'Enter' to restart\n'Esc' to exit",
-                start_y=game.SCREEN_PROPS.height - 700,
+                y=game.SCREEN_PROPS.height - 700,
                 color=arcade.color.MAGENTA,
                 font_size=game.DEFAULT_FONT_SIZE - 15,
                 **text_kwargs,
             ),
             arcade.Text(
                 " 'Enter' to restart\n 'Esc' to exit",
-                start_y=game.SCREEN_PROPS.height - 706,
+                y=game.SCREEN_PROPS.height - 706,
                 color=arcade.color.WHITE,
                 font_size=game.DEFAULT_FONT_SIZE - 15,
                 **text_kwargs,
@@ -1143,12 +1137,12 @@ class GameOverView(arcade.View):
         """Draw the underlying screen, blurred, then the game over text"""
 
         # First, draw the underlying view
-        # This also calls start_render(), so no need to do it again
+        # This also calls clear(), so no need to do it again
         self.game_view.on_draw()
 
         # Now create a filled rect that covers the current viewport
         # We get the viewport size from the game view
-        arcade.draw_lrtb_rectangle_filled(
+        arcade.draw_lrbt_rectangle_filled(
             left=self.game_view.view_left,
             right=self.game_view.view_left + game.SCREEN_PROPS.width,
             top=self.game_view.view_bottom + game.SCREEN_PROPS.height,
@@ -1189,7 +1183,7 @@ class NewHighScoreView(arcade.View):
         self.game_view = game_view
 
         # Store a semi-transparent color to use as an overlay
-        self.fill_color = arcade.make_transparent_color(arcade.color.WHITE, transparency=150)
+        self.fill_color = arcade.color.WHITE.replace(a=150)
 
         # keep the current score list and the new score
         self.new_score = game_view.score
@@ -1197,7 +1191,7 @@ class NewHighScoreView(arcade.View):
 
         # define texts
         self.text_kwargs = dict(
-            start_x=0,
+            x=0,
             font_name="Kenney Pixel Square",
             multiline=True,
             width=game.SCREEN_PROPS.width,
@@ -1206,28 +1200,28 @@ class NewHighScoreView(arcade.View):
         self.text_list = [
             arcade.Text(
                 "New High Score Set!",
-                start_y=game.SCREEN_PROPS.height - 150,
+                y=game.SCREEN_PROPS.height - 150,
                 color=arcade.color.MAGENTA,
                 font_size=game.DEFAULT_FONT_SIZE + 15,
                 **self.text_kwargs,
             ),
             arcade.Text(
                 " New High Score Set!",
-                start_y=game.SCREEN_PROPS.height - 156,
+                y=game.SCREEN_PROPS.height - 156,
                 color=arcade.color.WHITE,
                 font_size=game.DEFAULT_FONT_SIZE + 15,
                 **self.text_kwargs,
             ),
             arcade.Text(
                 "Please Type in your name (up to 5 characters):",
-                start_y=game.SCREEN_PROPS.height - 250,
+                y=game.SCREEN_PROPS.height - 250,
                 color=arcade.color.MAGENTA,
                 font_size=game.DEFAULT_FONT_SIZE - 10,
                 **self.text_kwargs,
             ),
             arcade.Text(
                 " Please Type in your name (up to 5 characters):",
-                start_y=game.SCREEN_PROPS.height - 256,
+                y=game.SCREEN_PROPS.height - 256,
                 color=arcade.color.WHITE,
                 font_size=game.DEFAULT_FONT_SIZE - 10,
                 **self.text_kwargs,
@@ -1268,12 +1262,12 @@ class NewHighScoreView(arcade.View):
         """Draw the underlying screen, blurred, then the game over text"""
 
         # First, draw the underlying view
-        # This also calls start_render(), so no need to do it again
+        # This also calls clear(), so no need to do it again
         self.game_view.on_draw()
 
         # Now create a filled rect that covers the current viewport
         # We get the viewport size from the game view
-        arcade.draw_lrtb_rectangle_filled(
+        arcade.draw_lrbt_rectangle_filled(
             left=self.game_view.view_left,
             right=self.game_view.view_left + game.SCREEN_PROPS.width,
             top=self.game_view.view_bottom + game.SCREEN_PROPS.height,
@@ -1290,14 +1284,14 @@ class NewHighScoreView(arcade.View):
 
         name_text = arcade.Text(
             self.new_name,
-            start_y=game.SCREEN_PROPS.height - 400,
+            y=game.SCREEN_PROPS.height - 400,
             color=arcade.color.BLACK,
             font_size=game.DEFAULT_FONT_SIZE,
             **self.text_kwargs,
         )
         name_shade = arcade.Text(
             f" {self.new_name}",
-            start_y=game.SCREEN_PROPS.height - 406,
+            y=game.SCREEN_PROPS.height - 406,
             color=arcade.color.MAGENTA,
             font_size=game.DEFAULT_FONT_SIZE,
             **self.text_kwargs,

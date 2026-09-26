@@ -118,7 +118,7 @@ class TestCompetitorCat(GameViewTestCase):
         poof = cat.poof()
         self.assertEqual(poof.center_x, 300)
         self.assertEqual(poof.center_y, approx(300 - cat.height / 3))
-        self.assertEqual(poof.scale, approx(0.3 * 2.0))
+        self.assertEqual(poof.scale_x, approx(0.3 * 2.0))
         self.assertIs(cat.poof(), poof)  # one poof sprite per colour
 
 
