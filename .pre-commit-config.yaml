@@ -4,12 +4,11 @@ repos:
     hooks:
       - id: unittest
         name: unittest
-        entry: python -m unittest discover
+        entry: python tests/pre_commit_unittest.py
         language: python
         types: [python]
         pass_filenames: false
         stages: [commit]
-        additional_dependencies: [numpy]
 
   - repo: https://github.com/psf/black
     rev: 23.3.0
