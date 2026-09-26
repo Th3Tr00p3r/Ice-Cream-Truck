@@ -779,7 +779,6 @@ class TitleView(arcade.View):
 
         # If the timer has run out, we toggle the instructions
         if self.display_timer < 0:
-
             # Toggle whether to show the instructions
             self.show_instructions = not self.show_instructions
 
@@ -870,7 +869,6 @@ class InstructionsView(arcade.View):
         ]
 
     def on_draw(self) -> None:
-
         # Draw a rectangle filled with the instructions image
         arcade.draw_texture_rectangle(
             **game.SCREEN_PROPS.as_dict(),
@@ -891,7 +889,6 @@ class InstructionsView(arcade.View):
             text.draw()
 
     def on_key_press(self, key: int, modifiers: int) -> None:
-
         if key in game.ANY_KEY:
             self.window.show_view(self.title_view)
 
@@ -1326,7 +1323,6 @@ class NewHighScoreView(arcade.View):
 
 
 if __name__ == "__main__":
-
     #    # for PyInstaller
     #    import sys, os
     #    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):

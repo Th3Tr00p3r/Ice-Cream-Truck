@@ -93,7 +93,6 @@ class AnimatedTexture:
     # TODO: what are the units of rate?
 
     def __init__(self, image_list, rate, should_loop=False):
-
         self.image_iter = iter(image_list)
         self.rate = rate
         self.should_loop = should_loop
@@ -116,7 +115,6 @@ class DigitTextures(SpriteMixin):
     MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "HUD"
 
     def __init__(self):
-
         self.digits = []
         for digit in range(10):
             self.digits.append(
@@ -224,7 +222,6 @@ class ColorCatTextures(SpriteMixin):
 
 
 class BasicSprite(arcade.Sprite, SpriteMixin):
-
     texture: arcade.Texture
 
     def __init__(self, init_position: Vector, **kwargs):
@@ -247,7 +244,6 @@ class Poof(BasicSprite):
         color_str: str,
         **kwargs,
     ):
-
         # TODO: perhaps there's no need for initial textures!
         super().__init__(init_position, hit_box_algorithm=None, scale=self.BASE_SCALE, **kwargs)
 
@@ -310,7 +306,6 @@ class CompetitorCat(BasicSprite):
         scale=1,
         **kwargs,
     ):
-
         super().__init__(
             init_position,
             filename=ASSETS_PATH / "images" / "cat" / "standing1.png",
@@ -425,7 +420,6 @@ class CompetitorCat(BasicSprite):
             elif 0 < self.change_y < 5:
                 self.change_texture_and_hitbox("stalling", idx=0, change_hitbox=True)
             elif -5 < self.change_y < 0:
-
                 self.change_texture_and_hitbox("stalling", idx=1, change_hitbox=True)
             elif self.change_y < -5:
                 self.change_texture_and_hitbox("falling")
@@ -562,7 +556,6 @@ class PlayerCat(BasicSprite):
         can_swipe=False,
         **kwargs,
     ):
-
         self.color_textures_dict = {
             color_str: ColorCatTextures(color_str, aura_color=aura_color_str)
             for color_str in game.PLAYER_COLORS
@@ -747,7 +740,6 @@ class PlayerCat(BasicSprite):
         """Decide if player is moving left, moving right, or stopping, based on pressed keys"""
 
         if not self.state.drop.is_dropping:
-
             is_only_left_pressed = (
                 self.keys_pressed[arcade.key.LEFT] and not self.keys_pressed[arcade.key.RIGHT]
             )
@@ -957,7 +949,6 @@ class PlayerCat(BasicSprite):
         self.pounce_timer = self.POUNCE_DURATION
 
     def apply_friction(self):
-
         if self.move_state != math.copysign(1, self.change_x) and not self.state.is_in_air:
             self.change_x *= game.FRICTION
             if abs(self.change_x) < 1:
@@ -1057,7 +1048,6 @@ class BlueCat(PlayerCat):
         *args,
         **kwargs,
     ):
-
         super().__init__(
             *args,
             speeds=SimpleNamespace(RUN=10, SLIDE=5, JUMP=20, POUNCE=35),
@@ -1085,7 +1075,6 @@ class RedCat(PlayerCat):
         *args,
         **kwargs,
     ):
-
         super().__init__(
             *args,
             speeds=SimpleNamespace(RUN=12, SLIDE=6, JUMP=24, POUNCE=42),
@@ -1120,7 +1109,6 @@ class YellowCat(PlayerCat):
         *args,
         **kwargs,
     ):
-
         super().__init__(
             *args,
             speeds=SimpleNamespace(RUN=8, SLIDE=4, JUMP=16, POUNCE=28),
@@ -1157,7 +1145,6 @@ class Popsicle(BasicSprite):
         type="regular",
         **kwargs,
     ) -> None:
-
         super().__init__(init_position, **kwargs)
 
         self.type = type
@@ -1224,7 +1211,6 @@ class RegularPopsicle(Popsicle):
         color_str: str,
         *args,
     ) -> None:
-
         super().__init__(*args, scale=game.POPSICLE_SCALING)
 
         # Load textures
@@ -1250,7 +1236,6 @@ class RegularPopsicle(Popsicle):
         """Doc."""
 
         if self.frozen_timer > self.FROZEN_TIME:
-
             self.melting_timer += delta_time
             if self.melting_timer * self.MELT_RATE > 1:
                 try:
@@ -1274,7 +1259,6 @@ class HeartPopsicle(Popsicle):
         self,
         *args,
     ) -> None:
-
         super().__init__(*args, type="heart", scale=game.POPSICLE_SCALING)
 
         self.texture = self.load_texture(
