@@ -85,11 +85,15 @@
     <script>
         // arcade.Text is misplaced when the drawing buffer isn't 1600x800, so render at 1x and let CSS scale it.
         window.devicePixelRatio = 1;
-        // arcade 4.0.0.dev7 refuses to start without OES_texture_float_linear, which it never uses and many Android GPUs lack.
-        const getExtension = WebGL2RenderingContext.prototype.getExtension;
-        WebGL2RenderingContext.prototype.getExtension = function (name) {
-            return getExtension.call(this, name) ?? (name === "OES_texture_float_linear" ? {} : null);
-        };
+        // Many Android GPUs lack OES_texture_float_linear: arcade refuses to start without it, so hand it a stand-in
+        // (the launcher then makes arcade's float textures nearest-filtered, since linear ones would read as zeros).
+        window.missingFloatLinear = !document.createElement("canvas").getContext("webgl2")?.getExtension("OES_texture_float_linear");
+        if (window.missingFloatLinear) {
+            const getExtension = WebGL2RenderingContext.prototype.getExtension;
+            WebGL2RenderingContext.prototype.getExtension = function (name) {
+                return getExtension.call(this, name) ?? (name === "OES_texture_float_linear" ? {} : null);
+            };
+        }
         const canvas = document.getElementById("pygletCanvas");
         function fitCanvas() {
             const scale = Math.min(innerWidth / 1600, innerHeight / 800);
@@ -195,6 +199,22 @@ def call_later(self, delay, callback, *args, **kwargs):
 
 
 WebLoop.call_later = call_later
+
+import js
+
+if js.window.missingFloatLinear:
+    from arcade.gl import enums
+    from arcade.gl.backends.webgl.texture import WebGLTexture2D
+
+    _texture_init = WebGLTexture2D.__init__
+
+    def texture_init(self, *args, **kwargs):
+        # arcade's f4 textures hold sprite/UV lookup data; linear-filtered they read as zeros without the extension
+        _texture_init(self, *args, **kwargs)
+        if self._dtype == "f4":
+            self.filter = enums.NEAREST, enums.NEAREST
+
+    WebGLTexture2D.__init__ = texture_init
 
 
 def touch_key(name, pressed):
