@@ -525,7 +525,7 @@ class PlatformerView(arcade.View):
 
     def on_draw(self) -> None:
         self.clear()
-        self.window.use_camera(self.view_left, self.view_bottom)
+        self.window.use_camera()  # HUD in screen space
 
         #        # TESTESTEST - TextureAtlas investigation
         #        n_textures = len(self.window.ctx.default_atlas._textures)
@@ -541,7 +541,7 @@ class PlatformerView(arcade.View):
         # Draw the score in the upper left
         if self.score != self.last_drawn_score:
             self.score_sprites = self.get_score_spritelist(
-                self.score, Vector(self.view_left + 50, game.SCREEN_PROPS.height - 100)
+                self.score, Vector(50, game.SCREEN_PROPS.height - 100)
             )
             self.last_drawn_score = self.score
         self.score_sprites.draw()
@@ -551,9 +551,7 @@ class PlatformerView(arcade.View):
             self.life_sprites = self.get_lives_spritelist(
                 self.MAX_PLAYER_LIVES,
                 self.player.lives,
-                Vector(
-                    self.view_left + game.SCREEN_PROPS.width - 275, game.SCREEN_PROPS.height - 100
-                ),
+                Vector(game.SCREEN_PROPS.width - 275, game.SCREEN_PROPS.height - 100),
             )
             self.last_drawn_lives = self.player.lives
         self.life_sprites.draw()
@@ -562,15 +560,14 @@ class PlatformerView(arcade.View):
         if self.score_multiplier != self.last_drawn_multiplier:
             self.multiplier_sprites = self.get_score_spritelist(
                 self.score_multiplier,
-                Vector(
-                    self.view_left + game.SCREEN_PROPS.width - 125, game.SCREEN_PROPS.height - 150
-                ),
+                Vector(game.SCREEN_PROPS.width - 125, game.SCREEN_PROPS.height - 150),
                 is_multiplier=True,
             )
             self.last_drawn_multiplier = self.score_multiplier
         self.multiplier_sprites.draw()
 
         # Draw map-related sprites
+        self.window.use_camera(self.view_left, self.view_bottom)
         self.map_sprite_lists["background"].draw()
         self.map_sprite_lists["background objects"].draw()
         self.map_sprite_lists["ground"].draw()

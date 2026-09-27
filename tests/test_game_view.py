@@ -636,6 +636,25 @@ class TestHud(GameViewTestCase):
             [s.texture is v.full_heart_texture for s in v.life_sprites], [True] + [False] * 4
         )
 
+    def test_hud_stays_on_screen_when_scrolled(self):
+        v = self.game_view
+        v.on_draw()
+        v.player.center_y = 1200
+        v.scroll_viewport()
+        self.assertGreater(v.view_bottom, 0)
+        screen_ys = []
+        for sprite_list in (v.score_sprites, v.life_sprites, v.multiplier_sprites):
+            draw = sprite_list.draw
+
+            def record(*args, sprite_list=sprite_list, draw=draw, **kwargs):
+                camera_bottom = self.window.game_camera.bottom_left[1]
+                screen_ys.extend(s.center_y - camera_bottom for s in sprite_list)
+                return draw(*args, **kwargs)
+
+            self.patch(sprite_list, "draw", record)
+        v.on_draw()
+        self.assertEqual(screen_ys, approx([742] * 6 + [679.4] * 2))
+
     def test_lives_hud_follows_current_cat(self):
         v = self.game_view
         h.press(v, K.Z)
