@@ -214,8 +214,8 @@ class Vector:
     def __getitem__(self, idx):
         return tuple(self)[idx]
 
-    def __setitem__(self, idx):
-        return tuple(self)[idx]
+    def __setitem__(self, idx, value):
+        setattr(self, ("x", "y")[idx], value)
 
     def __len__(self):
         return 2

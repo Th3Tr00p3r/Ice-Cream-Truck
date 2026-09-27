@@ -148,6 +148,14 @@ class TestVector(unittest.TestCase):
         self.assertEqual(v[1], 2)
         self.assertEqual(len(v), 2)
 
+    def test_setitem(self):
+        v = Vector(1, 2)
+        v[0] = 5
+        v[-1] = 7
+        self.assertEqual((v.x, v.y), (5, 7))
+        with self.assertRaises(IndexError):
+            v[2] = 0
+
     def test_arithmetic(self):
         self.assertEqual(Vector(1, 2) + Vector(3, 4), Vector(4, 6))
         self.assertEqual(Vector(1, 2) + (1, 1), (2, 3))
