@@ -639,6 +639,7 @@ class PlayerCat(BasicSprite):
         ground_height: float = None,
         can_pounce_kill=False,
         can_swipe=False,
+        can_drop=False,
         **kwargs,
     ):
         self.color_textures_dict = {
@@ -689,7 +690,6 @@ class PlayerCat(BasicSprite):
                     is_dashing=False,
                 ),
                 drop=SimpleNamespace(
-                    can_drop=False,
                     is_dropping=False,
                 ),
                 superpower=SimpleNamespace(
@@ -707,6 +707,9 @@ class PlayerCat(BasicSprite):
 
         # Swipe (YellowCat only)
         self.can_swipe = can_swipe
+
+        # Drop (YellowCat only); not in state, which is handed over on switching
+        self.can_drop = can_drop
 
         # Default to face-right
         self.face_direction = game.FACE_RIGHT
@@ -1202,10 +1205,9 @@ class YellowCat(PlayerCat):
             scale=game.CHARACTER_SCALING * 1.1,
             lives=4,
             can_swipe=True,
+            can_drop=True,
             **kwargs,
         )
-
-        self.state.drop.can_drop = True
 
     def drop(self):
         """Doc."""

@@ -375,6 +375,12 @@ class TestYellowDrop(GameViewTestCase):
         h.settle(game_view)
         self.assertFalse(yellow.state.drop.is_dropping)
 
+    def test_can_drop_survives_switching(self):
+        yellow = _switch_to(self.game_view, YellowCat)
+        self.assertTrue(yellow.can_drop)
+        cats = self.game_view.player_color_cat_dict
+        self.assertFalse(cats["deepskyblue"].can_drop or cats["crimson"].can_drop)
+
     def test_drop_area_kill(self):
         game_view = self.game_view
         yellow = _switch_to(game_view, YellowCat)
