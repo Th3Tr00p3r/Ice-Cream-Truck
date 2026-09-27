@@ -13,6 +13,10 @@
             -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
         }
         #status { position: fixed; top: 10px; left: 10px; color: #fff; font: 16px sans-serif; z-index: 2; }
+        #status.crash {
+            right: 10px; max-height: 80vh; overflow: auto; padding: 10px; white-space: pre-wrap;
+            background: rgba(120, 0, 0, 0.9); font: 14px monospace; user-select: text; -webkit-user-select: text;
+        }
         /* Centre the 1600x800 canvas; fitCanvas() scales it to the screen once the game has started. */
         #pygletCanvas {
             position: fixed; left: 50% !important; top: 50% !important;
@@ -85,6 +89,12 @@
         }
         const statusDiv = document.getElementById("status");
         const t0 = performance.now();
+        function showCrash(text) {
+            statusDiv.hidden = false;
+            statusDiv.classList.add("crash");
+            statusDiv.textContent = "The game crashed - reload the page.\n\n" + text;
+            console.error(text);
+        }
         function step(msg) {
             const line = `[${((performance.now() - t0) / 1000).toFixed(1)}s] ${msg}`;
             statusDiv.textContent = line;
@@ -178,6 +188,16 @@ def touch_view():
 os.chdir("/home/pyodide/game")
 sys.path.insert(0, "/home/pyodide/game")
 runpy.run_path("ice_cream_truck.py", run_name="__main__")
+
+
+def report_crash(task):
+    # pyglet stops the loop on any game exception and re-raises it in a task nobody awaits.
+    if not task.cancelled() and task.exception():
+        import js, traceback
+        js.showCrash("".join(traceback.format_exception(task.exception())))
+
+
+pyglet.app.event_loop._run_task.add_done_callback(report_crash)
 `);
             fitCanvas();
             addEventListener("resize", fitCanvas);
