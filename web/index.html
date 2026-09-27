@@ -85,6 +85,11 @@
     <script>
         // arcade.Text is misplaced when the drawing buffer isn't 1600x800, so render at 1x and let CSS scale it.
         window.devicePixelRatio = 1;
+        // arcade 4.0.0.dev7 refuses to start without OES_texture_float_linear, which it never uses and many Android GPUs lack.
+        const getExtension = WebGL2RenderingContext.prototype.getExtension;
+        WebGL2RenderingContext.prototype.getExtension = function (name) {
+            return getExtension.call(this, name) ?? (name === "OES_texture_float_linear" ? {} : null);
+        };
         const canvas = document.getElementById("pygletCanvas");
         function fitCanvas() {
             const scale = Math.min(innerWidth / 1600, innerHeight / 800);
