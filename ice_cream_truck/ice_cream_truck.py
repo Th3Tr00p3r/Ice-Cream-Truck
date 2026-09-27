@@ -2,7 +2,6 @@
 Ice Cream Truck Game
 """
 
-import sys
 from contextlib import suppress
 from itertools import cycle
 from random import choice, random, uniform
@@ -23,13 +22,11 @@ from sprites import (
     YellowCat,
 )
 
+
 # The web build is played with on-screen touch buttons instead of a keyboard
-IS_BROWSER = sys.platform == "emscripten"
-
-
 def keys_or_touch(keys_text: str, touch_text: str) -> str:
     """Return the keyboard wording on desktop or the touch-button wording in the browser"""
-    return touch_text if IS_BROWSER else keys_text
+    return touch_text if game.IN_BROWSER else keys_text
 
 
 # TODO: Red: superpower is time-stop: many pops are thrown then everything slows down but the player, for a time

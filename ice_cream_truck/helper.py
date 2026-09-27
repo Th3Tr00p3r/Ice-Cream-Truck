@@ -4,7 +4,6 @@ Helper Module
 
 import json
 import pickle
-import sys
 from contextlib import suppress
 from dataclasses import asdict, dataclass, field
 from typing import Any, List, Tuple
@@ -343,13 +342,10 @@ def get_aura_image(img, color_str, thickness=3):
     return PIL.Image.alpha_composite(blue_aura_img, img)
 
 
-IN_BROWSER = sys.platform == "emscripten"  # Pyodide: persist high scores in localStorage
-
-
 def load_high_scores() -> List[Tuple[str, int]]:
     """Doc."""
 
-    if IN_BROWSER:
+    if game.IN_BROWSER:  # persist in localStorage; the in-memory filesystem resets on reload
         try:  # missing, corrupt or blocked storage all fall back to the defaults
             from js import localStorage
 
@@ -368,7 +364,7 @@ def load_high_scores() -> List[Tuple[str, int]]:
 def save_high_scores(high_scores_list) -> None:
     """Doc."""
 
-    if IN_BROWSER:
+    if game.IN_BROWSER:
         with suppress(Exception):  # blocked or full storage: keep playing without saving
             from js import localStorage
 

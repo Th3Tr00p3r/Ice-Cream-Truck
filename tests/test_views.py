@@ -1,6 +1,7 @@
 """Menu/overlay views (title, instructions, scores, pause, game over, name entry) and drawing."""
 
 import arcade
+import game_constants as game
 from helper import load_high_scores, save_high_scores
 
 import ice_cream_truck as ict
@@ -275,7 +276,7 @@ class TestTouchWording(GameViewTestCase):
 
     def wording(self, is_browser):
         """Prompt texts (and their shades) of every menu and overlay screen"""
-        self.patch(ict, "IS_BROWSER", is_browser)
+        self.patch(game, "IN_BROWSER", is_browser)
         title = ict.TitleView()
         title.high_scores_list = load_high_scores()
         pause = ict.PauseView(self.game_view)

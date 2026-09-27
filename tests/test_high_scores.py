@@ -5,6 +5,7 @@ import sys
 from types import SimpleNamespace
 from unittest import mock
 
+import game_constants as game
 import helper
 from helper import load_high_scores, save_high_scores
 
@@ -103,7 +104,7 @@ class TestBrowserPersistence(GameTestCase):
         super().setUp()
         self.storage = FakeLocalStorage()
         self.key = str(self.high_scores_file)
-        self.patch(helper, "IN_BROWSER", True)
+        self.patch(game, "IN_BROWSER", True)
         patcher = mock.patch.dict(sys.modules, js=SimpleNamespace(localStorage=self.storage))
         patcher.start()
         self.addCleanup(patcher.stop)
