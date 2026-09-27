@@ -1,6 +1,7 @@
-"""Zip the game into web/game.zip and serve web/ on http://localhost:8000."""
+"""Zip the game and serve web/ on port 8000 at the host in argv[1] (default localhost)."""
 import functools
 import http.server
+import sys
 import zipfile
 from pathlib import Path
 
@@ -18,4 +19,5 @@ def build_zip():
 if __name__ == "__main__":
     build_zip()
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=WEB)
-    http.server.ThreadingHTTPServer(("localhost", 8000), handler).serve_forever()
+    host = sys.argv[1] if len(sys.argv) > 1 else "localhost"
+    http.server.ThreadingHTTPServer((host, 8000), handler).serve_forever()
