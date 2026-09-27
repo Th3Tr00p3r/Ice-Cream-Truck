@@ -9,7 +9,7 @@ import arcade
 import game_constants as game
 import numpy as np
 import PIL
-from arcade.hitbox import RotatableHitBox, algo_detailed
+from arcade.hitbox import RotatableHitBox, SimpleHitBoxAlgorithm, algo_detailed
 from helper import Limits, Vector, get_aura_image, tint_greyscale_pixels
 
 # Assets path
@@ -21,6 +21,46 @@ except NameError:
     ASSETS_PATH = Path("./assets")
 
 TexturePair = namedtuple("TexturePair", "RIGHT LEFT")
+
+
+class FastSimpleHitBoxAlgorithm(SimpleHitBoxAlgorithm):
+    """Same points as arcade's simple algorithm, computed with numpy instead of per-pixel getpixel"""
+
+    def calculate(self, image, **kwargs):
+        if image.mode != "RGBA":
+            raise ValueError("Image mode is not RGBA. image.convert('RGBA') is needed.")
+
+        alpha = np.asarray(image.getchannel("A"))
+        ys, xs = np.nonzero(alpha)
+        if not len(xs):
+            return self.create_bounding_box(image)
+
+        left, top, right, bottom = int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())
+        # each corner's offset is the smallest diagonal (|dx| + |dy|) distance to an opaque pixel
+        top_left = int(((xs - left) + (ys - top)).min())
+        top_right = int(((right - xs) + (ys - top)).min())
+        bottom_left = int(((xs - left) + (bottom - ys)).min())
+        bottom_right = int(((right - xs) + (bottom - ys)).min())
+
+        h, w = alpha.shape
+        points = [(left, bottom + 1 - bottom_left)]
+        if bottom_left:
+            points.append((left + bottom_left, bottom + 1))
+        points.append((right + 1 - bottom_right, bottom + 1))
+        if bottom_right:
+            points.append((right + 1, bottom + 1 - bottom_right))
+        points.append((right + 1, top + top_right))
+        if top_right:
+            points.append((right + 1 - top_right, top))
+        points.append((left + top_left, top))
+        if top_left:
+            points.append((left, top + top_left))
+
+        return tuple(dict.fromkeys((x - w / 2, (h - y) - h / 2) for x, y in points))
+
+
+algo_fast_simple = FastSimpleHitBoxAlgorithm()
+TEXTURE_CACHE: dict = {}
 
 
 def load_detailed_texture(filepath):
@@ -46,6 +86,17 @@ class SpriteMixin:
 
         texture_name = f"{filepath.parent.stem}_{filepath.stem}"
 
+        # identical textures are requested many times (e.g. each player cat loads all colours)
+        cache_key = (
+            filepath,
+            flipped_horizontally,
+            color,
+            aura_color,
+            repr(sorted(kwargs.items())),
+        )
+        with suppress(KeyError):
+            return TEXTURE_CACHE[cache_key]
+
         # open image at filepath
         img = PIL.Image.open(filepath)
         # flip if needed
@@ -62,7 +113,10 @@ class SpriteMixin:
             texture_name += f"_{aura_color}"
 
         # return a texture
-        return arcade.Texture(img, hash=texture_name)
+        TEXTURE_CACHE[cache_key] = arcade.Texture(
+            img, hash=texture_name, hit_box_algorithm=algo_fast_simple
+        )
+        return TEXTURE_CACHE[cache_key]
 
     def load_texture_pair(self, filepath, **kwargs):
         """

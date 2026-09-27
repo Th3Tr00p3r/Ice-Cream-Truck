@@ -272,20 +272,24 @@ def tint_greyscale_pixels(
     rgb_color = PIL.ImageColor.getrgb(color)
 
     img_arr = np.array(img)
-    norm_greyscale_img_arr = img_arr[:, :, :3].mean(2) / 255
+    rgb_arr = img_arr[:, :, :3].astype(np.int32)
+    rgb_sum = rgb_arr.sum(2)
+    mean_arr = rgb_sum / 3
+    norm_greyscale_img_arr = mean_arr / 255
+    # std <= t  <=>  3 * sum(x^2) - sum(x)^2 <= 9 * t^2, in exact integers (much faster than float std)
+    is_grey = (
+        3 * (rgb_arr * rgb_arr).sum(2) - rgb_sum * rgb_sum <= 9 * threshold_deviation_from_grey**2
+    )
     if should_tint_black:
-        greyscale_mask = (img_arr[:, :, :3].std(2) <= threshold_deviation_from_grey) & (
-            img_arr[:, :, :3].mean(2) <= threshold_shade_of_grey
-        )
+        greyscale_mask = is_grey & (mean_arr <= threshold_shade_of_grey)
     else:
-        greyscale_mask = (img_arr[:, :, :3].std(2) <= threshold_deviation_from_grey) & (
-            img_arr[:, :, :3].mean(2) > threshold_shade_of_grey
-        )
+        greyscale_mask = is_grey & (mean_arr > threshold_shade_of_grey)
 
     delta, factor = linear_beta
+    shifted_arr = norm_greyscale_img_arr + delta
     for dim, color_band in enumerate(rgb_color):
-        img_arr[greyscale_mask, dim] = np.clip(
-            (norm_greyscale_img_arr[greyscale_mask] + delta) * color_band * factor, 0, 255
+        img_arr[:, :, dim] = np.where(
+            greyscale_mask, np.clip(shifted_arr * color_band * factor, 0, 255), img_arr[:, :, dim]
         )
 
     img_arr = np.clip(img_arr, 0, 255)
@@ -311,14 +315,17 @@ def crop_resize_concat_horizontally(im_list, resample=PIL.Image.BOX):
     return dst
 
 
+# building its lookup table is slow, so build once
+DILATE_OP = PIL.ImageMorph.MorphOp(op_name="dilation8")
+
+
 def get_aura_image(img, color_str, thickness=3):
     """Takes an input PIL image and adds an 'aura' effect to it in chosen color"""
 
     alpha_chan = img.getchannel("A")
 
-    dilate_op = PIL.ImageMorph.MorphOp(op_name="dilation8")
     for _ in range(thickness):
-        _, alpha_chan = dilate_op.apply(alpha_chan)
+        _, alpha_chan = DILATE_OP.apply(alpha_chan)
 
     white_aura_img = alpha_chan.convert("RGBA")
     white_aura_img.putalpha(alpha_chan)
