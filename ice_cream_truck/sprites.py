@@ -572,9 +572,7 @@ class CompetitorCat(BasicSprite):
         except IndexError:
             # move towards ice_cream_truck
             self.truck_disp = self.game_view.ice_cream_truck.center_x - self.center_x
-            self.acceleration = (
-                math.copysign(1, self.truck_disp) * self.acceleration_magnitude * delta_time
-            )
+            self.acceleration = math.copysign(1, self.truck_disp) * self.acceleration_magnitude
             self.sought_popsicle = None
             self.mode = "returning"
         else:
