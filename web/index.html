@@ -154,20 +154,21 @@
         }
 
         async function main() {
+            const gameZip = fetch("game.zip", { cache: "no-cache" }).then((response) => response.arrayBuffer());
             step("Loading Pyodide");
             const pyodide = window.pyodide = await loadPyodide();
-            step("Loading numpy, pillow");
-            await pyodide.loadPackage(["micropip", "numpy", "pillow"]);
-            step("Installing arcade");
-            await pyodide.pyimport("micropip").install("arcade==4.0.0.dev7");
+            step("Loading packages");
+            // Local wheels (built by serve.py) skip micropip's PyPI lookups and arcade's 40 MB of unused files.
+            const wheels = ["arcade-4.0.0.dev7-py3-none-any.whl", "pyglet-3.0.dev8-py3-none-any.whl",
+                "pytiled_parser-2.2.9-py2.py3-none-any.whl"].map((name) => new URL("wheels/" + name, location.href).href);
+            await pyodide.loadPackage(["numpy", "pillow", "attrs", "typing-extensions", ...wheels]);
             step("Loading font");
             // pyglet adds fonts asynchronously in the browser, so preload the one the game uses before any text is made.
             const fontPath = pyodide.runPython(
                 "import arcade, pathlib; str(pathlib.Path(arcade.__file__).parent / 'resources/system/fonts/ttf/Kenney/Kenney_Pixel_Square.ttf')");
             document.fonts.add(await new FontFace("Kenney Pixel Square", pyodide.FS.readFile(fontPath)).load());
             step("Unpacking game");
-            const zip = await (await fetch("game.zip")).arrayBuffer();
-            pyodide.unpackArchive(zip, "zip", { extractDir: "/home/pyodide/game" });
+            pyodide.unpackArchive(await gameZip, "zip", { extractDir: "/home/pyodide/game" });
             step("Starting game");
             await pyodide.runPythonAsync(`
 import os, runpy, sys
