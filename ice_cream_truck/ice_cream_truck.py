@@ -293,7 +293,7 @@ class PlatformerView(arcade.View):
             delta_time *= self.SLOW_TIME_FACTOR
 
         # check if player is out of lives, and begin death animation
-        if not self.player.lives and self.game_over_timer == 0.0:
+        if not self.player.lives and self.player.is_alive:
             self.player.die()
             self.player_color_cat_dict.pop(self.player.color_str)
             self.player_cat_cycler = cycle(self.player_color_cat_dict.values())

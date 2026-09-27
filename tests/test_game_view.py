@@ -394,6 +394,14 @@ class TestDeathAndSwitching(GameViewTestCase):
         self.assertIsInstance(self.window.current_view, ict.GameOverView)
         self.assertIs(self.window.current_view.game_view, v)
 
+    def test_game_over_timer_landing_exactly_on_zero(self):
+        v = self.game_view
+        for _ in range(2):
+            _kill_current_player(v)
+        v.player.lives = 0
+        h.run_frames(v, 7, dt=0.5)  # 3.0 - 6 * 0.5 == 0.0 exactly
+        self.assertIsInstance(self.window.current_view, ict.GameOverView)
+
     def test_all_dead_with_high_score(self):
         v = self.game_view
         v.score = 120
