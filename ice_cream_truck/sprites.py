@@ -381,9 +381,8 @@ class CompetitorCat(BasicSprite):
     color_textures_dict = {
         color_str: ColorCatTextures(color_str) for color_str in game.COLORS - game.PLAYER_COLORS
     }
-    poof_dict = {
-        color_str: Poof(Vector(0, 0), color_str) for color_str in game.COLORS - game.PLAYER_COLORS
-    }
+    # build the poof textures up front (a first build mid-game takes ~0.3s); poof() reuses them
+    poof_preload = [Poof(Vector(0, 0), color_str) for color_str in game.COLORS - game.PLAYER_COLORS]
 
     def __init__(
         self,
@@ -602,7 +601,7 @@ class CompetitorCat(BasicSprite):
     def poof(self):
         """Doc."""
 
-        poof = self.poof_dict[self.color_str]
+        poof = Poof(Vector(0, 0), self.color_str)  # one per kill, so simultaneous poofs all show
         poof.reset(Vector(self.center_x, self.center_y - self.height / 3), self.scale_x)
         return poof
 

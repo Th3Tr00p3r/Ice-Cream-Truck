@@ -158,7 +158,10 @@ class TestCompetitorCat(GameViewTestCase):
         self.assertEqual(poof.center_y, approx(300 - cat.height / 3))
         # drawn at 0.3x the cat's scale of the 400px frames, whatever size they're stored at
         self.assertEqual(poof.scale_x * poof.loaded_textures[0].width, approx(400 * 0.3 * 2.0))
-        self.assertIs(cat.poof(), poof)  # one poof sprite per colour
+        other = cat.poof()
+        self.assertIsNot(other, poof)  # a new poof per kill
+        self.assertEqual(poof.center_x, 300)
+        self.assertIs(other.loaded_textures[0], poof.loaded_textures[0])  # textures are shared
 
 
 class TestAnimation(GameViewTestCase):

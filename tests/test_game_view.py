@@ -195,6 +195,19 @@ class TestCompetitors(GameViewTestCase):
         self.assertEqual(len(v.poofs), 1)
         self.assertGreater(len(self.sounds), n_sounds)
 
+    def test_same_color_kills_each_get_a_poof(self):
+        v = self.game_view
+        cats = [h.make_cat(v, x, 400, color_str="lime", on_ground=True) for x in (400, 1200)]
+        h.run_frames(v, 1)
+        for cat in cats:
+            v.player.center_x = cat.center_x
+            v.player.bottom = cat.top - cat.height / 2 + 5
+            v.player.change_y = 0
+            h.run_frames(v, 1)
+            self.assertNotIn(cat, v.cats)
+        self.assertEqual(len(v.poofs), 2)
+        self.assertEqual(sorted(p.center_x for p in v.poofs), approx([400, 1200], abs=20))
+
     def test_poof_disappears_after_animation(self):
         v = self.game_view
         cat = h.make_cat(v, 400, 400, on_ground=True)
