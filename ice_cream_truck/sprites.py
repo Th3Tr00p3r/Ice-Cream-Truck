@@ -77,7 +77,13 @@ class SpriteMixin:
     color_str: str  # mypy complained...?
 
     def load_texture(
-        self, filepath, flipped_horizontally=False, color: str = None, aura_color=None, **kwargs
+        self,
+        filepath,
+        flipped_horizontally=False,
+        color: str = None,
+        aura_color=None,
+        image_scale=1.0,
+        **kwargs,
     ):
         """
         Load a texture pair, with the second being a mirror image.
@@ -92,6 +98,7 @@ class SpriteMixin:
             flipped_horizontally,
             color,
             aura_color,
+            image_scale,
             repr(sorted(kwargs.items())),
         )
         with suppress(KeyError):
@@ -111,6 +118,11 @@ class SpriteMixin:
         if aura_color is not None:
             img = get_aura_image(img, aura_color)
             texture_name += f"_{aura_color}"
+        # shrink images drawn far below their full size, so they take less atlas memory
+        if image_scale != 1.0:
+            size = round(img.width * image_scale), round(img.height * image_scale)
+            img = img.resize(size, resample=PIL.Image.Resampling.LANCZOS)
+            texture_name += f"_x{image_scale}"
 
         # return a texture
         TEXTURE_CACHE[cache_key] = arcade.Texture(
@@ -309,6 +321,8 @@ class Poof(BasicSprite):
     MAIN_TEXTURE_PATH = ASSETS_PATH / "images" / "gifs"
     ANIMATION_RATE = 1 / 0.05
     BASE_SCALE = 0.3
+    # frames are stored at half size (never drawn above it), keeping the texture atlas small enough for tablets
+    IMAGE_SCALE = 0.5
 
     def __init__(
         self,
@@ -317,10 +331,14 @@ class Poof(BasicSprite):
         **kwargs,
     ):
         # TODO: perhaps there's no need for initial textures!
-        super().__init__(init_position, scale=self.BASE_SCALE, **kwargs)
+        super().__init__(init_position, scale=self.BASE_SCALE / self.IMAGE_SCALE, **kwargs)
 
         self.loaded_textures = [
-            self.load_texture(self.MAIN_TEXTURE_PATH / f"poof{i}.png", color=color_str)
+            self.load_texture(
+                self.MAIN_TEXTURE_PATH / f"poof{i}.png",
+                color=color_str,
+                image_scale=self.IMAGE_SCALE,
+            )
             for i in range(1, 16)
         ]
         #        self.animated_textures = iter(self.loaded_textures)
@@ -333,7 +351,7 @@ class Poof(BasicSprite):
 
         self.center_x = init_position.x
         self.center_y = init_position.y
-        self.scale = self.BASE_SCALE * scale
+        self.scale = self.BASE_SCALE / self.IMAGE_SCALE * scale
         self.texture_idx = 0
         self.animated_textures = iter(self.loaded_textures)
 
