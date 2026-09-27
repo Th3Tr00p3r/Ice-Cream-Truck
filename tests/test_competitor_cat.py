@@ -179,6 +179,16 @@ class TestAnimation(GameViewTestCase):
         cat.update_animation(DT)
         self.assertEqual(cat.texture_type, "begging")
 
+    def test_rising_and_stalling(self):
+        cat = h.make_cat(self.game_view, 200, 500, add=False)
+        cat.change_y = 20
+        cat.update_animation(DT)
+        self.assertEqual(cat.texture_type, "jumping")
+        cat.change_y = 3
+        cat.update_animation(DT)
+        self.assertEqual(cat.texture_type, "stalling")
+        self.assertIs(cat.texture, cat.loaded_textures.stalling[0][cat.state.is_facing_left])
+
     def test_falling(self):
         cat = h.make_cat(self.game_view, 200, 500, add=False)
         cat.change_y = -20

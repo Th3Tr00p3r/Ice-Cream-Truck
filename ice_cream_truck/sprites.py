@@ -502,7 +502,7 @@ class CompetitorCat(BasicSprite):
         self.change_angle = 0
 
         # Jumping/Stalling/Falling animation
-        if self.change_y < 0 and abs(self.change_x) <= self.speeds.RUN:
+        if self.state.is_in_air and abs(self.change_x) <= self.speeds.RUN:
             if 5 < self.change_y:
                 self.change_texture_and_hitbox("jumping", change_hitbox=True)
             elif 0 < self.change_y < 5:
