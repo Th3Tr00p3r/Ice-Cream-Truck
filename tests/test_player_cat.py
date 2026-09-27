@@ -4,7 +4,7 @@ import unittest
 
 import arcade
 import game_constants as game
-from sprites import BlueCat, PlayerCat, RedCat, YellowCat
+from sprites import BlueCat, ColorCatTextures, PlayerCat, RedCat, YellowCat
 
 from tests.support import GameViewTestCase, approx, h
 
@@ -67,6 +67,19 @@ class TestStats(GameViewTestCase):
         self.assertFalse(hasattr(blue, "air_dash"))
         self.assertTrue(hasattr(yellow, "drop"))
         self.assertFalse(hasattr(red, "drop"))
+
+    def test_builds_only_its_own_color_textures(self):
+        built = []
+        get_textures = ColorCatTextures._get_textures
+
+        def record(textures, *args, **kwargs):
+            built.append((textures.color_str, kwargs.get("aura_color")))
+            return get_textures(textures, *args, **kwargs)
+
+        self.patch(ColorCatTextures, "_get_textures", record)
+        view = self.game_view
+        YellowCat(game.PLAYER_START_POS, keys_pressed=view.keys_pressed, ground_height=0)
+        self.assertEqual(built, [("gold", "yellow")])
 
 
 class TestClassConstants(unittest.TestCase):

@@ -645,11 +645,6 @@ class PlayerCat(BasicSprite):
         can_drop=False,
         **kwargs,
     ):
-        self.color_textures_dict = {
-            color_str: ColorCatTextures(color_str, aura_color=aura_color_str)
-            for color_str in game.PLAYER_COLORS
-        }
-
         super().__init__(
             init_position,
             path_or_texture=load_detailed_texture(self.MAIN_TEXTURE_PATH / "running1.png"),
@@ -722,7 +717,7 @@ class PlayerCat(BasicSprite):
 
         # Load textures
         self.color_str = color_str
-        self.loaded_textures = self.color_textures_dict[color_str].textures
+        self.loaded_textures = ColorCatTextures(color_str, aura_color=aura_color_str).textures
         self.hitboxes = SimpleNamespace(
             **{
                 name: (
