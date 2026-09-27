@@ -2,8 +2,13 @@
 Game Constants
 """
 
+import sys
+
 import arcade
 from helper import ScreenProps, Vector
+
+# Platform: the web build runs under Pyodide
+IN_BROWSER = sys.platform == "emscripten"
 
 # Paths and filenames
 HIGH_SCORES_FILENAME = "ice_cream_truck_high_scores"

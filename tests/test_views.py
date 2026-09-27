@@ -1,6 +1,7 @@
 """Menu/overlay views (title, instructions, scores, pause, game over, name entry) and drawing."""
 
 import arcade
+import game_constants as game
 from helper import load_high_scores, save_high_scores
 
 import ice_cream_truck as ict
@@ -268,3 +269,61 @@ class TestWindow(GameTestCase):
     def test_window_enter_without_alt_keeps_windowed(self):
         self.window.on_key_press(K.ENTER, 0)
         self.assertFalse(self.window.fullscreen)
+
+
+class TestTouchWording(GameViewTestCase):
+    """The browser build names the on-screen buttons; desktop keeps the keyboard wording"""
+
+    def wording(self, is_browser):
+        """Prompt texts (and their shades) of every menu and overlay screen"""
+        self.patch(game, "IN_BROWSER", is_browser)
+        title = ict.TitleView()
+        title.high_scores_list = load_high_scores()
+        pause = ict.PauseView(self.game_view)
+        return {
+            "title": [title.blinking_text.text, title.blinking_shade.text],
+            "instructions": [t.text for t in ict.InstructionsView(title).text_list],
+            "high_scores": [t.text for t in ict.HighScoresView(title).text_list[4:]],
+            "pause": [pause.pause_text.text, pause.pause_shade.text],
+            "game_over": [t.text for t in ict.GameOverView(self.game_view).text_list[4:]],
+            "name_entry": [t.text for t in ict.NewHighScoreView(self.game_view).text_list[2:4]],
+        }
+
+    def test_desktop_keeps_keyboard_wording(self):
+        start = "'Enter' to Start\n'H' for High Scores\n'I' for Instructions\n'Esc' to quit"
+        keys = "Move - LEFT/RIGHT\nJump - SPACE\nPounce - DOWN (running at full speed)\nSwitch Cat: Z\nSuper Power - lCtrl\n\nCollect as many popsicles as you can!"
+        prompt = "Please Type in your name (up to 5 characters):"
+        expected = {
+            "title": [
+                start,
+                " 'Enter' to Start\n 'H' for High Scores\n 'I' for Instructions\n 'Esc' to quit",
+            ],
+            "instructions": ["Instructions / Keys", keys],
+            "high_scores": ["Press any key", " Press any key"],
+            "pause": [
+                "PAUSED\nPRESS 'P' OR 'Esc' TO CONTINUE",
+                " PAUSED\n PRESS 'P' OR 'Esc' TO CONTINUE",
+            ],
+            "game_over": [
+                "'Enter' to restart\n'Esc' to exit",
+                " 'Enter' to restart\n 'Esc' to exit",
+            ],
+            "name_entry": [prompt, f" {prompt}"],
+        }
+        self.assertEqual(self.wording(is_browser=False), expected)
+
+    def test_browser_names_touch_buttons(self):
+        moves = "Move - arrows\nJump - Jump\nPounce - down arrow (while running fast)\nSwitch Cat - cat\nSuper Power - star\n\nCollect as many popsicles as you can!"
+        expected = {
+            "title": ["Tap Play to start!", " Tap Play to start!"],
+            "instructions": ["How to Play", moves],
+            "high_scores": ["Tap Back to go back", " Tap Back to go back"],
+            "pause": ["PAUSED\nTAP RESUME TO PLAY", " PAUSED\n TAP RESUME TO PLAY"],
+            "game_over": ["Tap Play again!", " Tap Play again!"],
+            "name_entry": ["Type your name, then tap Done", " Type your name, then tap Done"],
+        }
+        wording = self.wording(is_browser=True)
+        self.assertEqual(wording, expected)
+        all_text = "\n".join(text for texts in wording.values() for text in texts).lower()
+        for keyboard_word in ("enter", "esc", "'", "space", "ctrl", "key", "quit", "exit"):
+            self.assertNotIn(keyboard_word, all_text)

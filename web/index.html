@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#000000">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <title>Ice Cream Truck</title>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.29.4/full/pyodide.js"></script>
+    <style>
+        html, body {
+            margin: 0; height: 100%; overflow: hidden; background: #000;
+            touch-action: none; user-select: none; -webkit-user-select: none;
+            -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+        }
+        #status { position: fixed; top: 10px; left: 10px; color: #fff; font: 16px sans-serif; z-index: 2; }
+        #status.crash {
+            right: 10px; max-height: 80vh; overflow: auto; padding: 10px; white-space: pre-wrap;
+            background: rgba(120, 0, 0, 0.9); font: 14px monospace; user-select: text; -webkit-user-select: text;
+        }
+        /* Centre the 1600x800 canvas; fitCanvas() scales it to the screen once the game has started. */
+        #pygletCanvas {
+            position: fixed; left: 50% !important; top: 50% !important;
+            transform: translate(-50%, -50%); visibility: hidden;
+        }
+        #controls .group { position: fixed; display: flex; gap: 2vmin; z-index: 1; }
+        #controls .group[hidden], #status[hidden] { display: none; }
+        #controls button {
+            min-width: 15vmin; height: 15vmin; padding: 0 3vmin; border-radius: 7.5vmin;
+            border: 0.6vmin solid rgba(255, 255, 255, 0.85); background: rgba(0, 0, 0, 0.35);
+            color: #fff; font: bold 5vmin sans-serif; touch-action: none;
+        }
+        #controls button.down { background: rgba(255, 0, 255, 0.6); }
+        #controls .menu button { background: rgba(255, 0, 255, 0.75); }
+        .bottom-left { left: 3vmin; bottom: 3vmin; }
+        .bottom-right { right: 3vmin; bottom: 3vmin; }
+        .top-center { top: 3vmin; left: 50%; transform: translateX(-50%); }
+        .bottom-center { bottom: 4vmin; left: 50%; transform: translateX(-50%); }
+        #nameInput {
+            width: 40vmin; height: 12vmin; font: bold 7vmin sans-serif; text-align: center;
+            text-transform: uppercase; border-radius: 3vmin; border: 0.6vmin solid #f0f;
+        }
+    </style>
+</head>
+<body>
+    <div id="status">Loading...</div>
+    <canvas id="pygletCanvas"></canvas>
+    <div id="controls">
+        <div class="group menu bottom-center" data-views="TitleView" hidden>
+            <button data-key="RETURN">&#9654; Play</button>
+            <button data-key="H">&#127942; Scores</button>
+            <button data-key="I">? Help</button>
+        </div>
+        <div class="group menu bottom-center" data-views="InstructionsView HighScoresView" hidden>
+            <button data-key="RETURN">&#8617; Back</button>
+        </div>
+        <div class="group menu bottom-center" data-views="GameOverView" hidden>
+            <button data-key="RETURN">&#8635; Play again</button>
+        </div>
+        <div class="group menu bottom-center" data-views="PauseView" hidden>
+            <button data-key="P">&#9654; Resume</button>
+        </div>
+        <div class="group top-center" data-views="PlatformerView" hidden>
+            <button data-key="P">&#10074;&#10074;</button>
+        </div>
+        <div class="group bottom-left" data-views="PlatformerView" hidden>
+            <button data-key="LEFT">&#9664;</button>
+            <button data-key="DOWN">&#9660;</button>
+            <button data-key="RIGHT">&#9654;</button>
+        </div>
+        <div class="group bottom-right" data-views="PlatformerView" hidden>
+            <button data-key="Z">&#128049;</button>
+            <button data-key="LCTRL">&#9733;</button>
+            <button data-key="SPACE">Jump</button>
+        </div>
+        <div class="group menu top-center" data-views="NewHighScoreView" hidden>
+            <input id="nameInput" maxlength="5" placeholder="NAME" autocomplete="off" autocorrect="off" spellcheck="false">
+            <button data-key="BACKSPACE">&#9003;</button>
+            <button data-key="RETURN">&#10004; Done</button>
+        </div>
+    </div>
+    <script>
+        // arcade.Text is misplaced when the drawing buffer isn't 1600x800, so render at 1x and let CSS scale it.
+        window.devicePixelRatio = 1;
+        // Many Android GPUs lack OES_texture_float_linear: arcade refuses to start without it, so hand it a stand-in
+        // (the launcher then makes arcade's float textures nearest-filtered, since linear ones would read as zeros).
+        window.missingFloatLinear = !document.createElement("canvas").getContext("webgl2")?.getExtension("OES_texture_float_linear");
+        if (window.missingFloatLinear) {
+            const getExtension = WebGL2RenderingContext.prototype.getExtension;
+            WebGL2RenderingContext.prototype.getExtension = function (name) {
+                return getExtension.call(this, name) ?? (name === "OES_texture_float_linear" ? {} : null);
+            };
+        }
+        const canvas = document.getElementById("pygletCanvas");
+        function fitCanvas() {
+            const scale = Math.min(innerWidth / 1600, innerHeight / 800);
+            canvas.style.transform = `translate(-50%, -50%) scale(${scale})`;
+            canvas.style.visibility = "visible";
+        }
+        const statusDiv = document.getElementById("status");
+        const t0 = performance.now();
+        function showCrash(text) {
+            statusDiv.hidden = false;
+            statusDiv.classList.add("crash");
+            statusDiv.textContent = "The game crashed - reload the page.\n\n" + text;
+            console.error(text);
+        }
+        function step(msg) {
+            const line = `[${((performance.now() - t0) / 1000).toFixed(1)}s] ${msg}`;
+            statusDiv.textContent = line;
+            console.log(line);
+        }
+
+        // Feed on-screen buttons into the game's key handlers and show the group for the current view.
+        function setupControls(pyodide) {
+            const touchKey = pyodide.globals.get("touch_key");
+            const touchView = pyodide.globals.get("touch_view");
+            for (const btn of document.querySelectorAll("#controls button[data-key]")) {
+                const key = btn.dataset.key;
+                btn.addEventListener("pointerdown", (e) => {
+                    e.preventDefault();
+                    btn.setPointerCapture(e.pointerId);
+                    btn.classList.add("down");
+                    touchKey(key, true);
+                });
+                const release = () => {
+                    if (!btn.classList.contains("down")) return;
+                    btn.classList.remove("down");
+                    touchKey(key, false);
+                };
+                for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) btn.addEventListener(type, release);
+            }
+            document.addEventListener("contextmenu", (e) => e.preventDefault());
+
+            // Name entry: mirror the text box into the game as letter/backspace key presses.
+            const nameInput = document.getElementById("nameInput");
+            let sent = "";
+            const tap = (key) => { touchKey(key, true); touchKey(key, false); };
+            nameInput.addEventListener("input", () => {
+                const name = nameInput.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 5);
+                let common = 0;
+                while (common < sent.length && sent[common] === name[common]) common++;
+                for (let i = sent.length; i > common; i--) tap("BACKSPACE");
+                for (const ch of name.slice(common)) tap(ch);
+                sent = name;
+            });
+            nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") tap("RETURN"); });
+
+            let currentView = null;
+            setInterval(() => {
+                const view = touchView();
+                if (view === currentView) return;
+                currentView = view;
+                for (const group of document.querySelectorAll("#controls .group")) {
+                    group.hidden = !group.dataset.views.split(" ").includes(view);
+                }
+                if (view === "NewHighScoreView") {
+                    sent = nameInput.value = "";
+                } else if (document.activeElement === nameInput) {
+                    nameInput.blur();
+                    canvas.focus();
+                }
+            }, 150);
+        }
+
+        async function main() {
+            const gameZip = fetch("game.zip", { cache: "no-cache" }).then((response) => response.arrayBuffer());
+            step("Loading Pyodide");
+            const pyodide = window.pyodide = await loadPyodide();
+            step("Loading packages");
+            // Local wheels (built by serve.py) skip micropip's PyPI lookups and arcade's 40 MB of unused files.
+            const wheels = ["arcade-4.0.0.dev7-py3-none-any.whl", "pyglet-3.0.dev8-py3-none-any.whl",
+                "pytiled_parser-2.2.9-py2.py3-none-any.whl"].map((name) => new URL("wheels/" + name, location.href).href);
+            await pyodide.loadPackage(["numpy", "pillow", "attrs", "typing-extensions", ...wheels]);
+            step("Loading font");
+            // pyglet adds fonts asynchronously in the browser, so preload the one the game uses before any text is made.
+            const fontPath = pyodide.runPython(
+                "import arcade, pathlib; str(pathlib.Path(arcade.__file__).parent / 'resources/system/fonts/ttf/Kenney/Kenney_Pixel_Square.ttf')");
+            document.fonts.add(await new FontFace("Kenney Pixel Square", pyodide.FS.readFile(fontPath)).load());
+            step("Unpacking game");
+            pyodide.unpackArchive(await gameZip, "zip", { extractDir: "/home/pyodide/game" });
+            step("Starting game");
+            await pyodide.runPythonAsync(`
+import os, runpy, sys
+import arcade, pyglet
+arcade.run = lambda view=None: pyglet.app.run(1 / 60)  # arcade 4.0.0.dev7 passes None, which never starts the browser draw loop
+
+from pyodide.webloop import WebLoop
+
+_call_later = WebLoop.call_later
+
+
+def call_later(self, delay, callback, *args, **kwargs):
+    # asyncio runs overdue timers at once; Pyodide raises instead, which pyglet's wait_for hits on slow devices.
+    return _call_later(self, max(delay, 0), callback, *args, **kwargs)
+
+
+WebLoop.call_later = call_later
+
+import js
+
+if js.window.missingFloatLinear:
+    from arcade.gl import enums
+    from arcade.gl.backends.webgl.texture import WebGLTexture2D
+
+    _texture_init = WebGLTexture2D.__init__
+
+    def texture_init(self, *args, **kwargs):
+        # arcade's f4 textures hold sprite/UV lookup data; linear-filtered they read as zeros without the extension
+        _texture_init(self, *args, **kwargs)
+        if self._dtype == "f4":
+            self.filter = enums.NEAREST, enums.NEAREST
+
+    WebGLTexture2D.__init__ = texture_init
+
+
+def touch_key(name, pressed):
+    event = "on_key_press" if pressed else "on_key_release"
+    arcade.get_window().dispatch_event(event, getattr(arcade.key, name), 0)
+
+
+def touch_view():
+    view = arcade.get_window().current_view
+    return type(view).__name__ if getattr(view, "is_game_ready", True) else "Loading"
+
+
+os.chdir("/home/pyodide/game")
+sys.path.insert(0, "/home/pyodide/game")
+runpy.run_path("ice_cream_truck.py", run_name="__main__")
+
+
+def report_crash(task):
+    # pyglet stops the loop on any game exception and re-raises it in a task nobody awaits.
+    if not task.cancelled() and task.exception():
+        import js, traceback
+        js.showCrash("".join(traceback.format_exception(task.exception())))
+
+
+pyglet.app.event_loop._run_task.add_done_callback(report_crash)
+`);
+            fitCanvas();
+            addEventListener("resize", fitCanvas);
+            setupControls(pyodide);
+            step("Running");
+            setTimeout(() => { statusDiv.hidden = true; }, 3000);
+        }
+        main().catch((err) => { step("Error: " + err.message); console.error(err); });
+    </script>
+</body>
+</html>

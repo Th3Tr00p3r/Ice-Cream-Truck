@@ -22,6 +22,13 @@ from sprites import (
     YellowCat,
 )
 
+
+# The web build is played with on-screen touch buttons instead of a keyboard
+def keys_or_touch(keys_text: str, touch_text: str) -> str:
+    """Return the keyboard wording on desktop or the touch-button wording in the browser"""
+    return touch_text if game.IN_BROWSER else keys_text
+
+
 # TODO: Red: superpower is time-stop: many pops are thrown then everything slows down but the player, for a time
 # TODO: Yellow: Grows bigger with every popsicle. tramples smaller cats by pouncing. superpower is popsicle magnet for a time
 
@@ -45,15 +52,15 @@ class GameWindow(arcade.Window):
             fullscreen=False,
         )
         arcade.resources.load_kenney_fonts()
-        self.camera = arcade.Camera2D()
+        self.game_camera = arcade.Camera2D()
         self.center_window()
         self.show_view(TitleView())
 
     def use_camera(self, left=0, bottom=0):
         """Draw from here on with (left, bottom) as the view's bottom-left corner"""
 
-        self.camera.bottom_left = left, bottom
-        self.camera.use()
+        self.game_camera.bottom_left = left, bottom
+        self.game_camera.use()
 
     def on_key_press(self, key, modifiers):
         """Called whenever a key is pressed."""
@@ -65,7 +72,7 @@ class GameWindow(arcade.Window):
             # Instead of a one-to-one mapping, stretch/squash window to match the
             # constants. This does NOT respect aspect ratio. You'd need to
             # do a bit of math for that.
-            self.camera.match_window(projection=False)
+            self.game_camera.match_window(projection=False)
 
 
 class PlatformerView(arcade.View):
@@ -727,8 +734,12 @@ class TitleView(arcade.View):
         )
 
         # define blinking text
-        self.blinking_text = arcade.Text(
+        blinking_str = keys_or_touch(
             "'Enter' to Start\n'H' for High Scores\n'I' for Instructions\n'Esc' to quit",
+            "Tap Play to start!",
+        )
+        self.blinking_text = arcade.Text(
+            blinking_str,
             y=game.SCREEN_PROPS.height // 2 - 200,
             color=arcade.color.MAGENTA,
             font_size=game.DEFAULT_FONT_SIZE - 15,
@@ -736,7 +747,7 @@ class TitleView(arcade.View):
         )
 
         self.blinking_shade = arcade.Text(
-            " 'Enter' to Start\n 'H' for High Scores\n 'I' for Instructions\n 'Esc' to quit",
+            " " + blinking_str.replace("\n", "\n "),
             y=game.SCREEN_PROPS.height // 2 - 206,
             color=arcade.color.WHITE,
             font_size=game.DEFAULT_FONT_SIZE - 15,
@@ -844,7 +855,7 @@ class InstructionsView(arcade.View):
 
         self.text_list = [
             arcade.Text(
-                "Instructions / Keys",
+                keys_or_touch("Instructions / Keys", "How to Play"),
                 x=0,
                 y=game.SCREEN_PROPS.height - 150,
                 color=arcade.color.BLACK,
@@ -854,7 +865,10 @@ class InstructionsView(arcade.View):
                 align="center",
             ),
             arcade.Text(
-                "Move - LEFT/RIGHT\nJump - SPACE\nPounce - DOWN (running at full speed)\nSwitch Cat: Z\nSuper Power - lCtrl\n\nCollect as many popsicles as you can!",
+                keys_or_touch(
+                    "Move - LEFT/RIGHT\nJump - SPACE\nPounce - DOWN (running at full speed)\nSwitch Cat: Z\nSuper Power - lCtrl\n\nCollect as many popsicles as you can!",
+                    "Move - arrows\nJump - Jump\nPounce - down arrow (while running fast)\nSwitch Cat - cat\nSuper Power - star\n\nCollect as many popsicles as you can!",
+                ),
                 x=100,
                 y=game.SCREEN_PROPS.height - 300,
                 color=arcade.color.BLACK,
@@ -908,6 +922,7 @@ class HighScoresView(arcade.View):
             f"{name} - {score}"
             for idx, (name, score) in enumerate(self.title_view.high_scores_list)
         ]
+        back_str = keys_or_touch("Press any key", "Tap Back to go back")
         text_kwargs = dict(
             x=0,
             font_name="Kenney Pixel Square",
@@ -945,14 +960,14 @@ class HighScoresView(arcade.View):
                 **text_kwargs,
             ),
             arcade.Text(
-                "Press any key",
+                back_str,
                 y=game.SCREEN_PROPS.height - 700,
                 color=arcade.color.MAGENTA,
                 font_size=game.DEFAULT_FONT_SIZE - 15,
                 **text_kwargs,
             ),
             arcade.Text(
-                " Press any key",
+                f" {back_str}",
                 y=game.SCREEN_PROPS.height - 706,
                 color=arcade.color.WHITE,
                 font_size=game.DEFAULT_FONT_SIZE - 15,
@@ -1016,8 +1031,11 @@ class PauseView(arcade.View):
             align="center",
         )
 
+        pause_str = keys_or_touch(
+            "PAUSED\nPRESS 'P' OR 'Esc' TO CONTINUE", "PAUSED\nTAP RESUME TO PLAY"
+        )
         self.pause_text = arcade.Text(
-            "PAUSED\nPRESS 'P' OR 'Esc' TO CONTINUE",
+            pause_str,
             y=game.SCREEN_PROPS.height // 2,
             color=arcade.color.MAGENTA,
             font_size=game.DEFAULT_FONT_SIZE,
@@ -1025,7 +1043,7 @@ class PauseView(arcade.View):
         )
 
         self.pause_shade = arcade.Text(
-            " PAUSED\n PRESS 'P' OR 'Esc' TO CONTINUE",
+            " " + pause_str.replace("\n", "\n "),
             y=game.SCREEN_PROPS.height // 2 - 6,
             color=arcade.color.WHITE,
             font_size=game.DEFAULT_FONT_SIZE,
@@ -1081,6 +1099,7 @@ class GameOverView(arcade.View):
         name_score_str_list = [
             f"{name} - {score}" for idx, (name, score) in enumerate(self.game_view.high_scores_list)
         ]
+        restart_str = keys_or_touch("'Enter' to restart\n'Esc' to exit", "Tap Play again!")
         text_kwargs = dict(
             x=0,
             font_name="Kenney Pixel Square",
@@ -1118,14 +1137,14 @@ class GameOverView(arcade.View):
                 **text_kwargs,
             ),
             arcade.Text(
-                "'Enter' to restart\n'Esc' to exit",
+                restart_str,
                 y=game.SCREEN_PROPS.height - 700,
                 color=arcade.color.MAGENTA,
                 font_size=game.DEFAULT_FONT_SIZE - 15,
                 **text_kwargs,
             ),
             arcade.Text(
-                " 'Enter' to restart\n 'Esc' to exit",
+                " " + restart_str.replace("\n", "\n "),
                 y=game.SCREEN_PROPS.height - 706,
                 color=arcade.color.WHITE,
                 font_size=game.DEFAULT_FONT_SIZE - 15,
@@ -1190,6 +1209,9 @@ class NewHighScoreView(arcade.View):
         self.new_name = ""
 
         # define texts
+        name_prompt_str = keys_or_touch(
+            "Please Type in your name (up to 5 characters):", "Type your name, then tap Done"
+        )
         self.text_kwargs = dict(
             x=0,
             font_name="Kenney Pixel Square",
@@ -1213,14 +1235,14 @@ class NewHighScoreView(arcade.View):
                 **self.text_kwargs,
             ),
             arcade.Text(
-                "Please Type in your name (up to 5 characters):",
+                name_prompt_str,
                 y=game.SCREEN_PROPS.height - 250,
                 color=arcade.color.MAGENTA,
                 font_size=game.DEFAULT_FONT_SIZE - 10,
                 **self.text_kwargs,
             ),
             arcade.Text(
-                " Please Type in your name (up to 5 characters):",
+                f" {name_prompt_str}",
                 y=game.SCREEN_PROPS.height - 256,
                 color=arcade.color.WHITE,
                 font_size=game.DEFAULT_FONT_SIZE - 10,
