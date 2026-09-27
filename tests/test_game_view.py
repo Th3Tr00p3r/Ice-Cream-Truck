@@ -249,6 +249,19 @@ class TestCompetitors(GameViewTestCase):
         self.assertIn(other, v.popsicles)
         self.assertEqual(v.score, 0)
 
+    def test_cat_retargets_when_another_cat_eats_its_popsicle(self):
+        v = self.game_view
+        eater = h.make_cat(v, 700, 400, color_str="lime", on_ground=True)
+        chaser = h.make_cat(v, 400, 400, color_str="lime", on_ground=True)
+        h.run_frames(v, 1)
+        eaten = h.make_popsicle(v, "lime", eater.center_x, eater.center_y)
+        other = h.make_popsicle(v, "lime", 1500, eater.center_y)
+        eaten.is_on_ground = other.is_on_ground = True
+        h.run_frames(v, 1)
+        self.assertNotIn(eaten, v.popsicles)
+        h.run_frames(v, 1)
+        self.assertIs(chaser.sought_popsicle, other)
+
     def test_cat_spawning(self):
         v = self.game_view
         v.new_cat_prob_frame = 1.0
@@ -501,7 +514,7 @@ class TestTimersAndTruck(GameViewTestCase):
             if pop not in v.popsicles:
                 break
         self.assertNotIn(pop, v.popsicles)
-        self.assertFalse(pop.is_off_screen)
+        self.assertTrue(pop.is_off_screen)
         self.assertEqual(values[:4], [10] * 4)
         self.assertEqual(values[-2:], [0, 0])
         self.assertEqual(values, sorted(values, reverse=True))

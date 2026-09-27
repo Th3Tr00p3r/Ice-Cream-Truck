@@ -1331,6 +1331,7 @@ class RegularPopsicle(Popsicle):
                     self.point_value -= int(self.BASE_POINTS * 0.1)
                 except StopIteration:
                     self.kill()
+                    self.is_off_screen = True
                 else:
                     self.melting_timer = 0.0
         else:

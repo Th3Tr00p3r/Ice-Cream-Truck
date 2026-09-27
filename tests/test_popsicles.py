@@ -110,6 +110,7 @@ class TestMelting(GameTestCase):
             self.assertIn(pop, sprites)
         pop.melt(0.25)
         self.assertNotIn(pop, sprites)
+        self.assertTrue(pop.is_off_screen)
         self.assertEqual(pop.point_value, 0)
 
     def test_melt_needs_time_between_steps(self):

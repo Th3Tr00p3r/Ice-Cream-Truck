@@ -93,6 +93,17 @@ class TestCompetitorCat(GameViewTestCase):
         cat.seek(DT)
         self.assertIs(cat.sought_popsicle, near)
 
+    def test_retargets_when_popsicle_melts_away(self):
+        cat = h.make_cat(self.game_view, 400, 300, color_str="lime", on_ground=True, add=False)
+        melting = h.make_popsicle(self.game_view, "lime", 600, 300)
+        other = h.make_popsicle(self.game_view, "lime", 1400, 300)
+        cat.seek(DT)
+        self.assertIs(cat.sought_popsicle, melting)
+        while melting in self.game_view.popsicles:
+            melting.melt(0.25)
+        cat.seek(DT)
+        self.assertIs(cat.sought_popsicle, other)
+
     def test_fetch_towards_left(self):
         cat = h.make_cat(self.game_view, 1400, 300, color_str="lime", on_ground=True, add=False)
         h.make_popsicle(self.game_view, "lime", 200, 300)
