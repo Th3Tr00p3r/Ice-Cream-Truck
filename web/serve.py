@@ -16,8 +16,14 @@ def build_zip():
                 zf.write(path, path.relative_to(GAME))
 
 
+class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-cache")  # revalidate so edits reach the tablet
+        super().end_headers()
+
+
 if __name__ == "__main__":
     build_zip()
-    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=WEB)
+    handler = functools.partial(NoCacheHandler, directory=WEB)
     host = sys.argv[1] if len(sys.argv) > 1 else "localhost"
     http.server.ThreadingHTTPServer((host, 8000), handler).serve_forever()
