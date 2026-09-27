@@ -71,6 +71,16 @@ class TestCompetitorCat(GameViewTestCase):
         self.assertEqual(cat.mode, "begging")
         self.assertEqual(cat.center_x, x)
 
+    def test_fast_cat_does_not_beg_from_either_side(self):
+        truck = self.game_view.ice_cream_truck
+        for side in (-1, 1):
+            with self.subTest(side=side):
+                cat = h.make_cat(self.game_view, truck.center_x + side * 50, 300, on_ground=True)
+                cat.change_x = -side * 100
+                cat.seek(DT)
+                self.assertEqual(cat.mode, "returning")
+                self.assertNotEqual(cat.change_x, 0)
+
     def test_fetches_own_color_popsicle(self):
         game_view = self.game_view
         cat = h.make_cat(game_view, 400, 300, color_str="lime", on_ground=True, add=False, run=150)

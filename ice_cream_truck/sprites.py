@@ -592,7 +592,7 @@ class CompetitorCat(BasicSprite):
             if (
                 self.mode in {"returning", "begging"}
                 and (abs(self.truck_disp) <= self.game_view.ice_cream_truck._width / 2)
-                and self.change_x < self.speeds.SLIDE
+                and abs(self.change_x) < self.speeds.SLIDE
             ):
                 self.change_x = 0.0
                 self.mode = "begging"
