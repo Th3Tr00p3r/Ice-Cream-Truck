@@ -840,7 +840,7 @@ class TitleView(arcade.View):
         elif key == arcade.key.H:
             self.window.show_view(HighScoresView(self))
 
-        elif key == arcade.key.ESCAPE:
+        elif key == arcade.key.ESCAPE and not game.IN_BROWSER:  # closing would kill the page's game
             self.window.close()
 
 
@@ -1190,7 +1190,10 @@ class GameOverView(arcade.View):
             self.window.show_view(self.game_view)
 
         elif key == arcade.key.ESCAPE:
-            self.window.close()
+            if game.IN_BROWSER:  # closing would kill the page's game
+                self.window.show_view(TitleView())
+            else:
+                self.window.close()
 
 
 class NewHighScoreView(arcade.View):
