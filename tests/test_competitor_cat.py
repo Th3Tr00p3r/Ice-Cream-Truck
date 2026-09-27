@@ -86,6 +86,13 @@ class TestCompetitorCat(GameViewTestCase):
             cat.seek(DT)
         self.assertEqual(cat.change_x, 150)
 
+    def test_fetches_nearest_own_color_popsicle(self):
+        cat = h.make_cat(self.game_view, 400, 300, color_str="lime", on_ground=True, add=False)
+        h.make_popsicle(self.game_view, "lime", 1400, 300)
+        near = h.make_popsicle(self.game_view, "lime", 600, 300)
+        cat.seek(DT)
+        self.assertIs(cat.sought_popsicle, near)
+
     def test_fetch_towards_left(self):
         cat = h.make_cat(self.game_view, 1400, 300, color_str="lime", on_ground=True, add=False)
         h.make_popsicle(self.game_view, "lime", 200, 300)

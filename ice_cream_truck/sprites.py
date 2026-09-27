@@ -568,7 +568,6 @@ class CompetitorCat(BasicSprite):
                     if popsicle.color_str == self.color_str
                 ],
                 key=lambda popsicle: abs(popsicle.center_x - self.center_x),
-                reverse=True,
             )[0]
         except IndexError:
             # move towards ice_cream_truck
