@@ -1,4 +1,4 @@
-"""Build web/game.zip and web/wheels/, then serve web/ on port 8000 at the host in argv[1] (default localhost)."""
+"""Build web/game.zip and web/wheels/, then serve web/ on port 8000 at the host in argv[1] (default localhost; --build-only skips serving)."""
 import functools
 import http.server
 import io
@@ -70,6 +70,8 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
 if __name__ == "__main__":
     build_zip()
     build_wheels()
+    if sys.argv[1:] == ["--build-only"]:
+        sys.exit()
     handler = functools.partial(NoCacheHandler, directory=WEB)
     host = sys.argv[1] if len(sys.argv) > 1 else "localhost"
     http.server.ThreadingHTTPServer((host, 8000), handler).serve_forever()

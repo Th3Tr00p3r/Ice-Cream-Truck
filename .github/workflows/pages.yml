@@ -1,0 +1,41 @@
+# Build the browser version (web/) and deploy it to GitHub Pages.
+name: Deploy web build to Pages
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; let a running deployment finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+      - name: Build game.zip and wheels
+        run: python web/serve.py --build-only
+      - name: Collect the files the page needs
+        run: |
+          mkdir _site
+          cp -r web/index.html web/manifest.webmanifest web/game.zip web/wheels web/icons _site/
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v5
