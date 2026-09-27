@@ -120,6 +120,16 @@ class TestScoring(GameViewTestCase):
         h.run_frames(v, 1)
         self.assertEqual(v.score, 4)
 
+    def test_fully_melted_popsicle_not_collected(self):
+        v = self.game_view
+        pop = h.make_popsicle(v, v.player.color_str)
+        pop.point_value = 0
+        n_sounds = len(self.sounds)
+        h.run_frames(v, 1)
+        self.assertIn(pop, v.popsicles)
+        self.assertEqual(v.player.n_favorite_pops_collected, 0)
+        self.assertEqual(len(self.sounds), n_sounds)
+
     def test_distant_popsicle_not_collected(self):
         v = self.game_view
         pop = h.make_popsicle(v, "lime", 1200, 600)

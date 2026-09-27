@@ -409,6 +409,8 @@ class PlatformerView(arcade.View):
             )
 
             for popsicle in popsicles_collected:
+                if not popsicle.point_value:
+                    continue  # fully melted
                 if popsicle.type == "heart":
                     if self.player.lives < self.player.MAX_LIVES:
                         self.player.lives += 1
