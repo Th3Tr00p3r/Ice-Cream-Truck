@@ -168,7 +168,7 @@ class AnimatedTexture:
     # TODO: what are the units of rate?
 
     def __init__(self, image_list, rate, should_loop=False):
-        self.image_iter = iter(image_list)
+        self.image_list = image_list
         self.rate = rate
         self.should_loop = should_loop
         self.n_imgs = len(image_list)
@@ -178,10 +178,13 @@ class AnimatedTexture:
     def next(self, delta_time: float):
         """Doc."""
 
-        if self.timer * self.rate >= 1:
-            self.img_idx += 1
         self.timer += delta_time
-        return self.image_iter[self.img_idx]
+        if self.timer * self.rate >= 1:
+            self.timer = 0.0
+            self.img_idx += 1
+            if self.img_idx == self.n_imgs:
+                self.img_idx = 0 if self.should_loop else self.n_imgs - 1
+        return self.image_list[self.img_idx]
 
 
 class DigitTextures(SpriteMixin):
