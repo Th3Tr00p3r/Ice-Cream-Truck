@@ -828,6 +828,9 @@ class TitleView(arcade.View):
             modifiers -- What modifiers were active
         """
 
+        if key in (arcade.key.RETURN, arcade.key.H) and not self.is_game_ready:
+            return  # still loading
+
         if not modifiers & arcade.key.MOD_ALT and key == arcade.key.RETURN:
             self.window.show_view(self.game_view)
 
