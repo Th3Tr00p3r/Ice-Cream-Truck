@@ -120,6 +120,16 @@ class TestScoring(GameViewTestCase):
         h.run_frames(v, 1)
         self.assertEqual(v.score, 4)
 
+    def test_fully_melted_popsicle_not_collected(self):
+        v = self.game_view
+        pop = h.make_popsicle(v, v.player.color_str)
+        pop.point_value = 0
+        n_sounds = len(self.sounds)
+        h.run_frames(v, 1)
+        self.assertIn(pop, v.popsicles)
+        self.assertEqual(v.player.n_favorite_pops_collected, 0)
+        self.assertEqual(len(self.sounds), n_sounds)
+
     def test_distant_popsicle_not_collected(self):
         v = self.game_view
         pop = h.make_popsicle(v, "lime", 1200, 600)
@@ -195,6 +205,19 @@ class TestCompetitors(GameViewTestCase):
         self.assertEqual(len(v.poofs), 1)
         self.assertGreater(len(self.sounds), n_sounds)
 
+    def test_same_color_kills_each_get_a_poof(self):
+        v = self.game_view
+        cats = [h.make_cat(v, x, 400, color_str="lime", on_ground=True) for x in (400, 1200)]
+        h.run_frames(v, 1)
+        for cat in cats:
+            v.player.center_x = cat.center_x
+            v.player.bottom = cat.top - cat.height / 2 + 5
+            v.player.change_y = 0
+            h.run_frames(v, 1)
+            self.assertNotIn(cat, v.cats)
+        self.assertEqual(len(v.poofs), 2)
+        self.assertEqual(sorted(p.center_x for p in v.poofs), approx([400, 1200], abs=20))
+
     def test_poof_disappears_after_animation(self):
         v = self.game_view
         cat = h.make_cat(v, 400, 400, on_ground=True)
@@ -248,6 +271,19 @@ class TestCompetitors(GameViewTestCase):
         self.assertNotIn(own, v.popsicles)
         self.assertIn(other, v.popsicles)
         self.assertEqual(v.score, 0)
+
+    def test_cat_retargets_when_another_cat_eats_its_popsicle(self):
+        v = self.game_view
+        eater = h.make_cat(v, 700, 400, color_str="lime", on_ground=True)
+        chaser = h.make_cat(v, 400, 400, color_str="lime", on_ground=True)
+        h.run_frames(v, 1)
+        eaten = h.make_popsicle(v, "lime", eater.center_x, eater.center_y)
+        other = h.make_popsicle(v, "lime", 1500, eater.center_y)
+        eaten.is_on_ground = other.is_on_ground = True
+        h.run_frames(v, 1)
+        self.assertNotIn(eaten, v.popsicles)
+        h.run_frames(v, 1)
+        self.assertIs(chaser.sought_popsicle, other)
 
     def test_cat_spawning(self):
         v = self.game_view
@@ -394,6 +430,14 @@ class TestDeathAndSwitching(GameViewTestCase):
         self.assertIsInstance(self.window.current_view, ict.GameOverView)
         self.assertIs(self.window.current_view.game_view, v)
 
+    def test_game_over_timer_landing_exactly_on_zero(self):
+        v = self.game_view
+        for _ in range(2):
+            _kill_current_player(v)
+        v.player.lives = 0
+        h.run_frames(v, 7, dt=0.5)  # 3.0 - 6 * 0.5 == 0.0 exactly
+        self.assertIsInstance(self.window.current_view, ict.GameOverView)
+
     def test_all_dead_with_high_score(self):
         v = self.game_view
         v.score = 120
@@ -493,7 +537,7 @@ class TestTimersAndTruck(GameViewTestCase):
             if pop not in v.popsicles:
                 break
         self.assertNotIn(pop, v.popsicles)
-        self.assertFalse(pop.is_off_screen)
+        self.assertTrue(pop.is_off_screen)
         self.assertEqual(values[:4], [10] * 4)
         self.assertEqual(values[-2:], [0, 0])
         self.assertEqual(values, sorted(values, reverse=True))
@@ -614,6 +658,25 @@ class TestHud(GameViewTestCase):
         self.assertEqual(
             [s.texture is v.full_heart_texture for s in v.life_sprites], [True] + [False] * 4
         )
+
+    def test_hud_stays_on_screen_when_scrolled(self):
+        v = self.game_view
+        v.on_draw()
+        v.player.center_y = 1200
+        v.scroll_viewport()
+        self.assertGreater(v.view_bottom, 0)
+        screen_ys = []
+        for sprite_list in (v.score_sprites, v.life_sprites, v.multiplier_sprites):
+            draw = sprite_list.draw
+
+            def record(*args, sprite_list=sprite_list, draw=draw, **kwargs):
+                camera_bottom = self.window.game_camera.bottom_left[1]
+                screen_ys.extend(s.center_y - camera_bottom for s in sprite_list)
+                return draw(*args, **kwargs)
+
+            self.patch(sprite_list, "draw", record)
+        v.on_draw()
+        self.assertEqual(screen_ys, approx([742] * 6 + [679.4] * 2))
 
     def test_lives_hud_follows_current_cat(self):
         v = self.game_view

@@ -168,7 +168,7 @@ class AnimatedTexture:
     # TODO: what are the units of rate?
 
     def __init__(self, image_list, rate, should_loop=False):
-        self.image_iter = iter(image_list)
+        self.image_list = image_list
         self.rate = rate
         self.should_loop = should_loop
         self.n_imgs = len(image_list)
@@ -178,10 +178,13 @@ class AnimatedTexture:
     def next(self, delta_time: float):
         """Doc."""
 
-        if self.timer * self.rate >= 1:
-            self.img_idx += 1
         self.timer += delta_time
-        return self.image_iter[self.img_idx]
+        if self.timer * self.rate >= 1:
+            self.timer = 0.0
+            self.img_idx += 1
+            if self.img_idx == self.n_imgs:
+                self.img_idx = 0 if self.should_loop else self.n_imgs - 1
+        return self.image_list[self.img_idx]
 
 
 class DigitTextures(SpriteMixin):
@@ -382,9 +385,8 @@ class CompetitorCat(BasicSprite):
     color_textures_dict = {
         color_str: ColorCatTextures(color_str) for color_str in game.COLORS - game.PLAYER_COLORS
     }
-    poof_dict = {
-        color_str: Poof(Vector(0, 0), color_str) for color_str in game.COLORS - game.PLAYER_COLORS
-    }
+    # build the poof textures up front (a first build mid-game takes ~0.3s); poof() reuses them
+    poof_preload = [Poof(Vector(0, 0), color_str) for color_str in game.COLORS - game.PLAYER_COLORS]
 
     def __init__(
         self,
@@ -504,7 +506,7 @@ class CompetitorCat(BasicSprite):
         self.change_angle = 0
 
         # Jumping/Stalling/Falling animation
-        if self.change_y < 0 and abs(self.change_x) <= self.speeds.RUN:
+        if self.state.is_in_air and abs(self.change_x) <= self.speeds.RUN:
             if 5 < self.change_y:
                 self.change_texture_and_hitbox("jumping", change_hitbox=True)
             elif 0 < self.change_y < 5:
@@ -569,7 +571,6 @@ class CompetitorCat(BasicSprite):
                     if popsicle.color_str == self.color_str
                 ],
                 key=lambda popsicle: abs(popsicle.center_x - self.center_x),
-                reverse=True,
             )[0]
         except IndexError:
             # move towards ice_cream_truck
@@ -594,7 +595,7 @@ class CompetitorCat(BasicSprite):
             if (
                 self.mode in {"returning", "begging"}
                 and (abs(self.truck_disp) <= self.game_view.ice_cream_truck._width / 2)
-                and self.change_x < self.speeds.SLIDE
+                and abs(self.change_x) < self.speeds.SLIDE
             ):
                 self.change_x = 0.0
                 self.mode = "begging"
@@ -606,7 +607,7 @@ class CompetitorCat(BasicSprite):
     def poof(self):
         """Doc."""
 
-        poof = self.poof_dict[self.color_str]
+        poof = Poof(Vector(0, 0), self.color_str)  # one per kill, so simultaneous poofs all show
         poof.reset(Vector(self.center_x, self.center_y - self.height / 3), self.scale_x)
         return poof
 
@@ -644,13 +645,9 @@ class PlayerCat(BasicSprite):
         ground_height: float = None,
         can_pounce_kill=False,
         can_swipe=False,
+        can_drop=False,
         **kwargs,
     ):
-        self.color_textures_dict = {
-            color_str: ColorCatTextures(color_str, aura_color=aura_color_str)
-            for color_str in game.PLAYER_COLORS
-        }
-
         super().__init__(
             init_position,
             path_or_texture=load_detailed_texture(self.MAIN_TEXTURE_PATH / "running1.png"),
@@ -694,7 +691,6 @@ class PlayerCat(BasicSprite):
                     is_dashing=False,
                 ),
                 drop=SimpleNamespace(
-                    can_drop=False,
                     is_dropping=False,
                 ),
                 superpower=SimpleNamespace(
@@ -713,6 +709,9 @@ class PlayerCat(BasicSprite):
         # Swipe (YellowCat only)
         self.can_swipe = can_swipe
 
+        # Drop (YellowCat only); not in state, which is handed over on switching
+        self.can_drop = can_drop
+
         # Default to face-right
         self.face_direction = game.FACE_RIGHT
 
@@ -721,7 +720,7 @@ class PlayerCat(BasicSprite):
 
         # Load textures
         self.color_str = color_str
-        self.loaded_textures = self.color_textures_dict[color_str].textures
+        self.loaded_textures = ColorCatTextures(color_str, aura_color=aura_color_str).textures
         self.hitboxes = SimpleNamespace(
             **{
                 name: (
@@ -1207,10 +1206,9 @@ class YellowCat(PlayerCat):
             scale=game.CHARACTER_SCALING * 1.1,
             lives=4,
             can_swipe=True,
+            can_drop=True,
             **kwargs,
         )
-
-        self.state.drop.can_drop = True
 
     def drop(self):
         """Doc."""
@@ -1333,6 +1331,7 @@ class RegularPopsicle(Popsicle):
                     self.point_value -= int(self.BASE_POINTS * 0.1)
                 except StopIteration:
                     self.kill()
+                    self.is_off_screen = True
                 else:
                     self.melting_timer = 0.0
         else:

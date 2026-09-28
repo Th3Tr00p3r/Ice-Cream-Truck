@@ -1,11 +1,12 @@
 """Popsicle physics, melting/point values, and screen-edge handling."""
 
 import math
+import unittest
 
 import arcade
 import game_constants as game
 from helper import Vector
-from sprites import HeartPopsicle, Popsicle, RegularPopsicle
+from sprites import AnimatedTexture, HeartPopsicle, Popsicle, RegularPopsicle
 
 from tests.support import GameTestCase, approx
 
@@ -110,6 +111,7 @@ class TestMelting(GameTestCase):
             self.assertIn(pop, sprites)
         pop.melt(0.25)
         self.assertNotIn(pop, sprites)
+        self.assertTrue(pop.is_off_screen)
         self.assertEqual(pop.point_value, 0)
 
     def test_melt_needs_time_between_steps(self):
@@ -153,3 +155,13 @@ class TestRestrictPosition(GameTestCase):
         pop.restrict_position(game.SCREEN_PROPS.width, should_kill=True)
         self.assertEqual(pop.position, (800, 400))
         self.assertFalse(pop.is_off_screen)
+
+
+class TestAnimatedTexture(unittest.TestCase):
+    def test_advances_at_rate_and_stops_at_last_image(self):
+        anim = AnimatedTexture(["a", "b", "c"], rate=10)
+        self.assertEqual([anim.next(0.05) for _ in range(8)], list("abbccccc"))
+
+    def test_loops(self):
+        anim = AnimatedTexture(["a", "b"], rate=10, should_loop=True)
+        self.assertEqual([anim.next(0.1) for _ in range(4)], list("baba"))

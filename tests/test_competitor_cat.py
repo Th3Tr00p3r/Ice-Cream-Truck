@@ -71,6 +71,16 @@ class TestCompetitorCat(GameViewTestCase):
         self.assertEqual(cat.mode, "begging")
         self.assertEqual(cat.center_x, x)
 
+    def test_fast_cat_does_not_beg_from_either_side(self):
+        truck = self.game_view.ice_cream_truck
+        for side in (-1, 1):
+            with self.subTest(side=side):
+                cat = h.make_cat(self.game_view, truck.center_x + side * 50, 300, on_ground=True)
+                cat.change_x = -side * 100
+                cat.seek(DT)
+                self.assertEqual(cat.mode, "returning")
+                self.assertNotEqual(cat.change_x, 0)
+
     def test_fetches_own_color_popsicle(self):
         game_view = self.game_view
         cat = h.make_cat(game_view, 400, 300, color_str="lime", on_ground=True, add=False, run=150)
@@ -85,6 +95,24 @@ class TestCompetitorCat(GameViewTestCase):
         for _ in range(3):
             cat.seek(DT)
         self.assertEqual(cat.change_x, 150)
+
+    def test_fetches_nearest_own_color_popsicle(self):
+        cat = h.make_cat(self.game_view, 400, 300, color_str="lime", on_ground=True, add=False)
+        h.make_popsicle(self.game_view, "lime", 1400, 300)
+        near = h.make_popsicle(self.game_view, "lime", 600, 300)
+        cat.seek(DT)
+        self.assertIs(cat.sought_popsicle, near)
+
+    def test_retargets_when_popsicle_melts_away(self):
+        cat = h.make_cat(self.game_view, 400, 300, color_str="lime", on_ground=True, add=False)
+        melting = h.make_popsicle(self.game_view, "lime", 600, 300)
+        other = h.make_popsicle(self.game_view, "lime", 1400, 300)
+        cat.seek(DT)
+        self.assertIs(cat.sought_popsicle, melting)
+        while melting in self.game_view.popsicles:
+            melting.melt(0.25)
+        cat.seek(DT)
+        self.assertIs(cat.sought_popsicle, other)
 
     def test_fetch_towards_left(self):
         cat = h.make_cat(self.game_view, 1400, 300, color_str="lime", on_ground=True, add=False)
@@ -120,7 +148,10 @@ class TestCompetitorCat(GameViewTestCase):
         self.assertEqual(poof.center_y, approx(300 - cat.height / 3))
         # drawn at 0.3x the cat's scale of the 400px frames, whatever size they're stored at
         self.assertEqual(poof.scale_x * poof.loaded_textures[0].width, approx(400 * 0.3 * 2.0))
-        self.assertIs(cat.poof(), poof)  # one poof sprite per colour
+        other = cat.poof()
+        self.assertIsNot(other, poof)  # a new poof per kill
+        self.assertEqual(poof.center_x, 300)
+        self.assertIs(other.loaded_textures[0], poof.loaded_textures[0])  # textures are shared
 
     def test_poof_shows_its_first_frame_right_away(self):
         cat = h.make_cat(self.game_view, 300, 300, color_str="brown", add=False)
@@ -144,6 +175,16 @@ class TestAnimation(GameViewTestCase):
         cat.seek(DT)
         cat.update_animation(DT)
         self.assertEqual(cat.texture_type, "begging")
+
+    def test_rising_and_stalling(self):
+        cat = h.make_cat(self.game_view, 200, 500, add=False)
+        cat.change_y = 20
+        cat.update_animation(DT)
+        self.assertEqual(cat.texture_type, "jumping")
+        cat.change_y = 3
+        cat.update_animation(DT)
+        self.assertEqual(cat.texture_type, "stalling")
+        self.assertIs(cat.texture, cat.loaded_textures.stalling[0][cat.state.is_facing_left])
 
     def test_falling(self):
         cat = h.make_cat(self.game_view, 200, 500, add=False)

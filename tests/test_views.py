@@ -91,11 +91,26 @@ class TestTitleView(TitleTestCase):
         view.on_key_press(K.X, 0)
         self.assertIs(self.window.current_view, title)
 
+    def test_enter_and_h_ignored_while_loading(self):
+        title = self.title
+        for key in (K.RETURN, K.H):
+            with self.subTest(key=key):
+                title.on_key_press(key, 0)
+                self.assertIs(self.window.current_view, title)
+
     def test_escape_quits(self):
         ready_title = self.make_ready()
         closed = self.closed()
         ready_title.on_key_press(K.ESCAPE, 0)
         self.assertEqual(closed, [True])
+
+    def test_escape_does_nothing_in_browser(self):
+        self.patch(game, "IN_BROWSER", True)
+        ready_title = self.make_ready()
+        closed = self.closed()
+        ready_title.on_key_press(K.ESCAPE, 0)
+        self.assertFalse(closed)
+        self.assertIs(self.window.current_view, ready_title)
 
     def test_other_keys_ignored(self):
         ready_title = self.make_ready()
@@ -161,6 +176,14 @@ class TestGameOverView(GameViewTestCase):
         h.press(self.game_view, K.Q)
         self.window.current_view.on_key_press(K.ESCAPE, 0)
         self.assertEqual(closed, [True])
+
+    def test_escape_returns_to_title_in_browser(self):
+        self.patch(game, "IN_BROWSER", True)
+        closed = self.closed()
+        h.press(self.game_view, K.Q)
+        self.window.current_view.on_key_press(K.ESCAPE, 0)
+        self.assertFalse(closed)
+        self.assertIsInstance(self.window.current_view, ict.TitleView)
 
     def test_shows_high_scores(self):
         self.game_view.high_scores_list = [("X", 3), ("Y", 2), ("Z", 1)]
