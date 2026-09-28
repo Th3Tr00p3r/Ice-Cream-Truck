@@ -122,6 +122,13 @@ class TestCompetitorCat(GameViewTestCase):
         self.assertEqual(poof.scale_x * poof.loaded_textures[0].width, approx(400 * 0.3 * 2.0))
         self.assertIs(cat.poof(), poof)  # one poof sprite per colour
 
+    def test_poof_shows_its_first_frame_right_away(self):
+        cat = h.make_cat(self.game_view, 300, 300, color_str="brown", add=False)
+        poof = cat.poof()
+        self.assertIs(poof.texture, poof.loaded_textures[0])
+        poof.update_animation(DT)
+        self.assertIs(poof.texture, poof.loaded_textures[0])
+
 
 class TestAnimation(GameViewTestCase):
     def test_running_on_ground(self):

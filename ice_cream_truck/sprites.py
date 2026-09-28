@@ -353,6 +353,7 @@ class Poof(BasicSprite):
         self.center_y = init_position.y
         self.scale = self.BASE_SCALE / self.IMAGE_SCALE * scale
         self.texture_idx = 0
+        self.texture = self.loaded_textures[0]  # else arcade 3 draws its placeholder until frame 1
         self.animated_textures = iter(self.loaded_textures)
 
     def update_animation(self, delta_time: float):
