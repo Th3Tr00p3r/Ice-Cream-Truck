@@ -39,6 +39,13 @@
         .bottom-right { right: 3vmin; bottom: 3vmin; }
         .top-center { top: 3vmin; left: 50%; transform: translateX(-50%); }
         .bottom-center { bottom: 4vmin; left: 50%; transform: translateX(-50%); }
+        #rotate {
+            display: none; position: fixed; inset: 0; z-index: 3; flex-direction: column; align-items: center;
+            justify-content: center; gap: 4vmin; padding: 0 6vmin; text-align: center;
+            background: #000; color: #fff; font: bold 6vmin sans-serif;
+        }
+        #rotate .icon { font-size: 25vmin; }
+        @media (orientation: portrait) { #rotate { display: flex; } }
         #nameInput {
             width: 40vmin; height: 12vmin; font: bold 7vmin sans-serif; text-align: center;
             text-transform: uppercase; border-radius: 3vmin; border: 0.6vmin solid #f0f;
@@ -46,6 +53,7 @@
     </style>
 </head>
 <body>
+    <div id="rotate"><div class="icon">&#128241;&#8635;</div>Turn the screen sideways to play</div>
     <div id="status">Loading...</div>
     <canvas id="pygletCanvas"></canvas>
     <div id="controls">
@@ -150,8 +158,10 @@
             nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") tap("RETURN"); });
 
             let currentView = null;
+            const upright = matchMedia("(orientation: portrait)");
             setInterval(() => {
                 const view = touchView();
+                if (upright.matches && view === "PlatformerView") tap("P");  // the rotate overlay hides the game
                 if (view === currentView) return;
                 currentView = view;
                 for (const group of document.querySelectorAll("#controls .group")) {
