@@ -159,6 +159,15 @@
 
             let currentView = null;
             const upright = matchMedia("(orientation: portrait)");
+            let hiddenAt = null;
+            document.addEventListener("visibilitychange", () => {
+                if (document.hidden) {
+                    hiddenAt = Date.now();
+                    if (touchView() === "PlatformerView") tap("P");
+                } else if (frozenWhileAway || (hiddenAt !== null && Date.now() - hiddenAt > RESTART_AFTER_MS)) {
+                    location.reload();
+                }
+            });
             setInterval(() => {
                 const view = touchView();
                 if (upright.matches && view === "PlatformerView") tap("P");  // the rotate overlay hides the game
@@ -257,6 +266,11 @@ pyglet.app.event_loop._run_task.add_done_callback(report_crash)
             step("Running");
             setTimeout(() => { statusDiv.hidden = true; }, 3000);
         }
+        // Android keeps the app alive or frozen even when it's swiped away; start fresh after long absences
+        const RESTART_AFTER_MS = 3 * 60 * 1000;
+        let frozenWhileAway = false;
+        document.addEventListener("freeze", () => { frozenWhileAway = true; });  // restart once visible again
+        addEventListener("pageshow", (e) => { if (e.persisted) location.reload(); });  // restored from back/forward cache
         main().catch((err) => { step("Error: " + err.message); console.error(err); });
     </script>
 </body>
