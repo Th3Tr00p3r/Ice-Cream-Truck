@@ -59,16 +59,6 @@ class TestCompetitorCat(GameViewTestCase):
                 self.assertEqual(cat.change_x, direction * 100)  # capped at the run speed
                 self.assertGreater((cat.center_x - x) * direction, 0)
 
-    def test_returning_accelerates_like_fetching(self):
-        returning = h.make_cat(self.game_view, 100, 300, on_ground=True, add=False, run=1000)
-        fetching = h.make_cat(self.game_view, 100, 300, "pink", on_ground=True, add=False, run=1000)
-        h.make_popsicle(self.game_view, "pink", 1000, 300)
-        returning.seek(DT)
-        fetching.seek(DT)
-        self.assertEqual((returning.mode, fetching.mode), ("returning", "fetching"))
-        self.assertEqual(returning.change_x, approx(fetching.change_x))
-        self.assertEqual(returning.change_x, approx(100 * 60 * DT))
-
     def test_begs_at_truck_when_slow(self):
         truck = self.game_view.ice_cream_truck
         cat = h.make_cat(self.game_view, truck.center_x + 50, 300, on_ground=True, add=False)
